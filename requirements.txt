@@ -1,0 +1,29 @@
+# 核心依赖
+python-dotenv>=1.0.0  # 环境变量管理
+cryptography>=41.0.0  # 加密功能
+pyOpenSSL>=23.0.0     # SSL/TLS支持
+
+# 数据库
+SQLAlchemy>=2.0.0     # ORM
+alembic>=1.12.0       # 数据库迁移
+
+# 邮件处理
+dnspython>=2.4.0      # DNS查询
+email-validator>=2.0.0 # 邮件地址验证
+
+# 扩展功能（可选）
+python-gnupg>=0.5.0   # PGP加密
+scikit-learn>=1.3.0   # 机器学习（垃圾邮件过滤）
+nltk>=3.8.1           # 自然语言处理
+
+# Web界面（可选）
+Flask>=2.3.0          # Web框架
+Flask-WTF>=1.2.0      # 表单处理
+Flask-Login>=0.6.2    # 用户认证
+
+# GUI（可选）
+PyQt5>=5.15.0         # GUI框架
+
+# 测试
+pytest>=7.4.0         # 测试框架
+pytest-cov>=4.1.0     # 测试覆盖率

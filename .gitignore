@@ -172,3 +172,15 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Project specific
+data/
+logs/
+certs/
+.env
+*.eml
+config/qq_config.json
+config/*.env
+!config/.env.template
+test_logs/
+test.py
