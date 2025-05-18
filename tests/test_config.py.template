@@ -1,0 +1,19 @@
+"""
+测试配置 - 存储测试账号信息
+"""
+
+# 测试账号信息
+TEST_ACCOUNT = {
+    "smtp_host": "smtp.qq.com", # QQ邮箱SMTP服务器地址
+    "smtp_port": 465,
+    "smtp_ssl": True,
+    "pop3_host": "pop.qq.com", # QQ邮箱POP3服务器地址
+    "pop3_port": 995,
+    "pop3_ssl": True,
+    "username": "your_email@example.com",  # 替换为你的邮箱
+    "password": "your_password_or_app_token",  # 替换为你的授权码
+    "recipient": "recipient@example.com",  # 替换为接收测试邮件的邮箱
+}
+
+# 测试存储目录
+TEST_STORAGE_DIR = "test_data"

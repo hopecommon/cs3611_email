@@ -120,7 +120,7 @@ def send_encrypted_email(sender, recipient, subject, content, recipient_key, sen
     msg.attach(MIMEText(str(encrypted_content), 'plain'))
     
     # 发送邮件
-    server = smtplib.SMTP('smtp.example.com', 587)
+    server = smtplib.SMTP('smtp.example.com', 465)
     server.starttls()
     server.login(sender, 'your_password')
     server.send_message(msg)
@@ -163,7 +163,7 @@ def send_email_with_starttls(sender_email, receiver_email, subject, message, pas
     
     try:
         # 连接到服务器
-        server = smtplib.SMTP('smtp.example.com', 587)
+        server = smtplib.SMTP('smtp.example.com', 465)
         server.ehlo()  # 向服务器标识自己
         
         # 启动TLS加密
@@ -257,7 +257,7 @@ server.login(username, password)  # 如果服务器支持CRAM-MD5，会自动使
 ```python
 import smtplib
 
-server = smtplib.SMTP('smtp.example.com', 587)
+server = smtplib.SMTP('smtp.example.com', 465)
 server.starttls()
 server.ehlo()
 

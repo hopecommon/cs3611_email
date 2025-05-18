@@ -65,7 +65,7 @@ def load_env_config(env_path: Optional[str] = None) -> Dict[str, Any]:
     config = {
         "smtp": {
             "host": os.getenv("SMTP_HOST", "smtp.qq.com"),
-            "port": int(os.getenv("SMTP_PORT", "587")),
+            "port": int(os.getenv("SMTP_PORT", "465")),
             "use_ssl": os.getenv("SMTP_USE_SSL", "False").lower() == "true",
             "ssl_port": int(os.getenv("SMTP_SSL_PORT", "465")),
             "username": os.getenv("SMTP_USERNAME", ""),

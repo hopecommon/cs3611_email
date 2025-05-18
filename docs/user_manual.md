@@ -47,7 +47,7 @@
 # SMTP服务器配置
 SMTP_SERVER = {
     "host": "smtp.example.com",  # SMTP服务器地址
-    "port": 25,                  # SMTP服务器端口
+    "port": 465,                  # SMTP服务器端口
     "use_ssl": True,             # 是否使用SSL/TLS
     "username": "your_email@example.com",  # 邮箱账户
     "password": "your_password",           # 邮箱密码或授权码
@@ -57,7 +57,7 @@ SMTP_SERVER = {
 # POP3服务器配置
 POP3_SERVER = {
     "host": "pop.example.com",   # POP3服务器地址
-    "port": 110,                 # POP3服务器端口
+    "port": 995,                 # POP3服务器端口
     "use_ssl": True,             # 是否使用SSL/TLS
     "username": "your_email@example.com",  # 邮箱账户
     "password": "your_password",           # 邮箱密码或授权码

@@ -17,10 +17,10 @@
 ```python
 TEST_ACCOUNT = {
     "smtp_host": "smtp.qq.com",
-    "smtp_port": 25,
+    "smtp_port": 465,
     "smtp_ssl": True,
     "pop3_host": "pop.qq.com",
-    "pop3_port": 110,
+    "pop3_port": 995,
     "pop3_ssl": True,
     "username": "your_email@qq.com",  # 替换为你的QQ邮箱
     "password": "your_password",      # 替换为你的授权码

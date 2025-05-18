@@ -57,13 +57,13 @@ def test_connect(self, mock_smtp):
     mock_smtp.return_value = mock_smtp_instance
 
     # 创建SMTP客户端
-    client = SMTPClient(host="localhost", port=25)
+    client = SMTPClient(host="localhost", port=465)
 
     # 连接
     client.connect()
 
     # 验证
-    mock_smtp.assert_called_once_with("localhost", 25, timeout=30)
+    mock_smtp.assert_called_once_with("localhost", 465, timeout=30)
 ```
 
 ## 跨平台测试注意事项

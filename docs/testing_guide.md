@@ -17,10 +17,10 @@
 ```python
 TEST_ACCOUNT = {
     "smtp_host": "smtp.qq.com",
-    "smtp_port": 25,
+    "smtp_port": 465,
     "smtp_ssl": True,
     "pop3_host": "pop.qq.com",
-    "pop3_port": 110,
+    "pop3_port": 995,
     "pop3_ssl": True,
     "username": "your_email@qq.com",  # 替换为你的QQ邮箱
     "password": "your_password",      # 替换为你的授权码
@@ -186,7 +186,7 @@ from common.models import Email, EmailAddress, Attachment, EmailStatus
 # 创建SMTP客户端
 smtp_client = SMTPClient(
     host="smtp.qq.com",
-    port=25,
+    port=465,
     use_ssl=True,
     username="your_email@qq.com",  # 替换为你的QQ邮箱
     password="your_password",      # 替换为你的授权码
@@ -221,7 +221,7 @@ from client.pop3_client import POP3Client
 # 创建POP3客户端
 pop3_client = POP3Client(
     host="pop.qq.com",
-    port=110,
+    port=995,
     use_ssl=True,
     username="your_email@qq.com",  # 替换为你的QQ邮箱
     password="your_password",      # 替换为你的授权码
@@ -260,7 +260,7 @@ from client.pop3_client import POP3Client
 # 创建POP3客户端
 pop3_client = POP3Client(
     host="pop.qq.com",
-    port=110,
+    port=995,
     use_ssl=True,
     username="your_email@qq.com",  # 替换为你的QQ邮箱
     password="your_password",      # 替换为你的授权码

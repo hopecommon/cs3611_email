@@ -10,6 +10,7 @@ from pathlib import Path
 from datetime import datetime
 import tempfile
 import shutil
+from email.header import decode_header
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -54,13 +55,13 @@ class TestSMTPClient(unittest.TestCase):
         mock_smtp_instance.has_extn.return_value = False
 
         # 创建SMTP客户端
-        client = SMTPClient(host="localhost", port=25, use_ssl=False)
+        client = SMTPClient(host="localhost", port=465, use_ssl=False)
 
         # 连接
         client.connect()
 
         # 验证
-        mock_smtp.assert_called_once_with("localhost", 25, timeout=30)
+        mock_smtp.assert_called_once_with("localhost", 465, timeout=30)
         self.assertFalse(mock_smtp_instance.starttls.called)
         self.assertFalse(mock_smtp_instance.login.called)
 
@@ -73,13 +74,13 @@ class TestSMTPClient(unittest.TestCase):
         mock_smtp_instance.has_extn.return_value = True
 
         # 创建SMTP客户端
-        client = SMTPClient(host="localhost", port=25, use_ssl=False)
+        client = SMTPClient(host="localhost", port=465, use_ssl=False)
 
         # 连接
         client.connect()
 
         # 验证
-        mock_smtp.assert_called_once_with("localhost", 25, timeout=30)
+        mock_smtp.assert_called_once_with("localhost", 465, timeout=30)
         mock_smtp_instance.has_extn.assert_called_once_with("STARTTLS")
         mock_smtp_instance.starttls.assert_called_once()
         self.assertFalse(mock_smtp_instance.login.called)
@@ -92,7 +93,7 @@ class TestSMTPClient(unittest.TestCase):
         mock_smtp_ssl.return_value = mock_smtp_instance
 
         # 创建SMTP客户端
-        client = SMTPClient(host="localhost", port=25, use_ssl=True, ssl_port=465)
+        client = SMTPClient(host="localhost", port=465, use_ssl=True, ssl_port=465)
 
         # 连接
         client.connect()
@@ -113,14 +114,14 @@ class TestSMTPClient(unittest.TestCase):
 
         # 创建SMTP客户端
         client = SMTPClient(
-            host="localhost", port=25, use_ssl=False, username="user", password="pass"
+            host="localhost", port=465, use_ssl=False, username="user", password="pass"
         )
 
         # 连接
         client.connect()
 
         # 验证
-        mock_smtp.assert_called_once_with("localhost", 25, timeout=30)
+        mock_smtp.assert_called_once_with("localhost", 465, timeout=30)
         mock_smtp_instance.login.assert_called_once_with("user", "pass")
 
     @patch("smtplib.SMTP")
@@ -131,7 +132,7 @@ class TestSMTPClient(unittest.TestCase):
         mock_smtp.return_value = mock_smtp_instance
 
         # 创建SMTP客户端
-        client = SMTPClient(host="localhost", port=25, use_ssl=False)
+        client = SMTPClient(host="localhost", port=465, use_ssl=False)
 
         # 连接
         client.connect()
@@ -151,7 +152,7 @@ class TestSMTPClient(unittest.TestCase):
         mock_smtp.return_value = mock_smtp_instance
 
         # 创建SMTP客户端
-        client = SMTPClient(host="localhost", port=25, use_ssl=False)
+        client = SMTPClient(host="localhost", port=465, use_ssl=False)
 
         # 连接
         client.connect()
@@ -229,7 +230,15 @@ class TestSMTPClient(unittest.TestCase):
 
         # 验证
         self.assertEqual(part.get_content_type(), "text/plain")
-        self.assertEqual(part.get_filename(), "test.txt")
+
+        # 解码文件名后再比较
+        encoded_filename = part.get_filename()
+        decoded_parts = decode_header(encoded_filename)
+        filename = decoded_parts[0][0]
+        if isinstance(filename, bytes):
+            filename = filename.decode("utf-8")
+        self.assertEqual(filename, "test.txt")
+
         self.assertEqual(
             part.get_payload(decode=True).decode("utf-8"), "This is test content."
         )

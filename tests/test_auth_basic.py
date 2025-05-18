@@ -27,7 +27,7 @@ class TestBasicAuth(unittest.TestCase):
         """测试SMTP客户端初始化"""
         client = SMTPClient(
             host="smtp.example.com",
-            port=25,
+            port=465,
             use_ssl=True,
             username="user@example.com",
             password="password",
@@ -43,7 +43,7 @@ class TestBasicAuth(unittest.TestCase):
         """测试POP3客户端初始化"""
         client = POP3Client(
             host="pop3.example.com",
-            port=110,
+            port=995,
             use_ssl=True,
             username="user@example.com",
             password="password",

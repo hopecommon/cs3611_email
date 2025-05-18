@@ -50,7 +50,7 @@ with smtplib.SMTP_SSL("smtp.example.com", 465, context=context) as server:
     # 发送邮件...
 
 # 或使用STARTTLS
-with smtplib.SMTP("smtp.example.com", 587) as server:
+with smtplib.SMTP("smtp.example.com", 465) as server:
     server.ehlo()
     server.starttls(context=context)  # 升级为加密连接
     server.ehlo()

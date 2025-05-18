@@ -258,7 +258,7 @@ class TestSSLAuthentication(unittest.TestCase):
         """测试SMTP SSL加密认证"""
         client = SMTPClient(
             host=self.smtp_host,
-            port=25,
+            port=465,
             use_ssl=True,  # 使用SSL加密
             username=self.username,
             password=self.password,
@@ -279,7 +279,7 @@ class TestSSLAuthentication(unittest.TestCase):
         """测试POP3 SSL加密认证"""
         client = POP3Client(
             host=self.pop3_host,
-            port=110,
+            port=995,
             use_ssl=True,  # 使用SSL加密
             username=self.username,
             password=self.password,

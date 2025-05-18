@@ -23,7 +23,7 @@ os.makedirs(EMAIL_STORAGE_DIR, exist_ok=True)
 # 服务器配置
 SMTP_SERVER = {
     "host": str(os.getenv("SMTP_HOST", "localhost")),
-    "port": int(os.getenv("SMTP_PORT", 25)),
+    "port": int(os.getenv("SMTP_PORT", 465)),
     "use_ssl": os.getenv("SMTP_USE_SSL", "False").lower() == "true",
     "ssl_port": int(os.getenv("SMTP_SSL_PORT", 465)),
     "username": str(os.getenv("SMTP_USERNAME", "")),

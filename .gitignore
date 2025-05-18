@@ -184,3 +184,10 @@ config/*.env
 !config/.env.template
 test_logs/
 test.py
+
+# 测试配置文件（敏感信息）
+tests/test_config.py
+
+# 其他敏感文件
+.env
+*.log
