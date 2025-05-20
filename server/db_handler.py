@@ -270,29 +270,30 @@ class DatabaseHandler:
             from_addr: 发件人地址
             to_addrs: 收件人地址列表
             subject: 邮件主题
-            date: 日期时间
+            date: 邮件日期
             size: 邮件大小（字节）
             is_spam: 是否为垃圾邮件
-            spam_score: 垃圾邮件评分
+            spam_score: 垃圾邮件评分（0.0-1.0）
         """
         try:
-            conn = sqlite3.connect(self.db_path)
+            conn = self._get_connection()
             cursor = conn.cursor()
 
-            # 将收件人列表转换为JSON字符串
+            # 转换to_addrs为JSON字符串
             to_addrs_json = json.dumps(to_addrs)
 
-            # 格式化日期
+            # 转换日期为ISO格式
             date_str = date.isoformat()
 
-            # 内容路径
             # 确保邮件ID不包含非法字符
+            # 标准化处理：移除两端空格，去掉<>，@替换为_at_
             safe_id = message_id.strip().strip("<>").replace("@", "_at_")
             # 移除Windows文件系统不允许的字符
             safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
             # 确保没有前导或尾随空格
             safe_id = safe_id.strip()
 
+            # 构建邮件内容路径
             content_path = os.path.join(EMAIL_STORAGE_DIR, f"{safe_id}.eml")
 
             # 插入数据
@@ -320,6 +321,9 @@ class DatabaseHandler:
             conn.close()
 
             logger.info(f"已保存邮件元数据: {message_id}")
+        except sqlite3.IntegrityError:
+            # 如果是主键冲突（邮件ID已存在），则忽略
+            logger.info(f"邮件元数据已存在（主键冲突），跳过保存: {message_id}")
         except Exception as e:
             logger.error(f"保存邮件元数据时出错: {e}")
             raise
@@ -336,16 +340,35 @@ class DatabaseHandler:
             # 确保目录存在
             os.makedirs(EMAIL_STORAGE_DIR, exist_ok=True)
 
-            # 生成文件名
+            # 尝试从邮件内容中提取Message-ID
+            import email
+
+            try:
+                msg = email.message_from_string(content)
+                extracted_message_id = msg.get("Message-ID")
+                if extracted_message_id:
+                    logger.info(f"从邮件内容中提取到Message-ID: {extracted_message_id}")
+                    # 使用提取的Message-ID而非传入的message_id
+                    message_id = extracted_message_id
+            except Exception as e:
+                logger.warning(f"从邮件内容中提取Message-ID失败: {e}")
+
             # 确保邮件ID不包含非法字符
+            # 标准化处理：移除两端空格，去掉<>，@替换为_at_
             safe_id = message_id.strip().strip("<>").replace("@", "_at_")
             # 移除Windows文件系统不允许的字符
             safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
             # 确保没有前导或尾随空格
             safe_id = safe_id.strip()
 
+            # 与客户端保持一致的命名方式，使用Message-ID作为文件名
             filename = f"{safe_id}.eml"
             filepath = os.path.join(EMAIL_STORAGE_DIR, filename)
+
+            # 检查文件是否已存在
+            if os.path.exists(filepath):
+                logger.info(f"邮件文件已存在，跳过保存: {filepath}")
+                return
 
             # 保存内容
             with open(filepath, "w", encoding="utf-8") as f:
@@ -413,49 +436,117 @@ class DatabaseHandler:
 
         Returns:
             Optional[str]: 邮件内容的字符串表示，如果不存在或读取失败则返回None。
-            返回的内容通常是完整的邮件（包括头部和正文），符合RFC 5322格式。
-
-        Example:
-            ```python
-            # 获取邮件内容
-            content = db.get_email_content("<example@domain.com>")
-            if content:
-                # 解析邮件内容
-                from email import message_from_string
-                msg = message_from_string(content)
-
-                # 获取主题
-                subject = msg["Subject"]
-                print(f"邮件主题: {subject}")
-
-                # 获取正文
-                body = ""
-                if msg.is_multipart():
-                    for part in msg.walk():
-                        if part.get_content_type() == "text/plain":
-                            body = part.get_payload(decode=True).decode()
-                            break
-                else:
-                    body = msg.get_payload(decode=True).decode()
-
-                print(f"邮件正文: {body}")
-            else:
-                print("邮件不存在或无法读取")
-            ```
         """
         try:
             # 获取元数据
             metadata = self.get_email_metadata(message_id)
-            if not metadata or not metadata["content_path"]:
+            if not metadata:
+                logger.warning(f"未找到邮件元数据: {message_id}")
                 return None
 
-            # 读取内容
-            with open(metadata["content_path"], "r", encoding="utf-8") as f:
-                content = f.read()
+            # 尝试使用metadata中的content_path
+            if metadata.get("content_path") and os.path.exists(
+                metadata["content_path"]
+            ):
+                try:
+                    with open(metadata["content_path"], "r", encoding="utf-8") as f:
+                        content = f.read()
+                    logger.debug(f"从内容路径读取邮件内容: {metadata['content_path']}")
+                    return content
+                except Exception as e:
+                    logger.error(f"读取邮件内容时出错: {e}")
 
-            return content
+            # 尝试使用标准化的ID查找文件
+            # 标准化处理：移除两端空格，去掉<>，@替换为_at_
+            safe_id = message_id.strip().strip("<>").replace("@", "_at_")
+            # 移除Windows文件系统不允许的字符
+            safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
+            # 确保没有前导或尾随空格
+            safe_id = safe_id.strip()
+
+            # 尝试打开文件
+            try:
+                filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_id}.eml")
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    logger.debug(f"从标准化ID路径读取邮件内容: {filepath}")
+                    return content
+            except Exception as e:
+                logger.error(f"读取邮件内容时出错: {e}")
+
+            # 如果所有尝试都失败，尝试从数据库中重新生成邮件内容
+            try:
+                # 提取关键信息，确保适当的错误处理
+                subject = metadata.get("subject", "")
+                from_addr = metadata.get("from_addr", "")
+
+                # 处理to_addrs，它可能是字符串、列表或JSON字符串
+                to_addrs = metadata.get("to_addrs", [])
+                if isinstance(to_addrs, str):
+                    try:
+                        to_addrs = json.loads(to_addrs)
+                    except (json.JSONDecodeError, TypeError):
+                        to_addrs = [to_addrs]
+
+                # 格式化收件人列表
+                if isinstance(to_addrs, list):
+                    if (
+                        to_addrs
+                        and isinstance(to_addrs[0], dict)
+                        and "address" in to_addrs[0]
+                    ):
+                        to_addr_str = ", ".join(
+                            addr["address"] for addr in to_addrs if "address" in addr
+                        )
+                    else:
+                        to_addr_str = ", ".join(str(addr) for addr in to_addrs)
+                else:
+                    to_addr_str = str(to_addrs)
+
+                # 获取并格式化日期
+                date_str = metadata.get("date", "")
+                if date_str:
+                    try:
+                        date = datetime.datetime.fromisoformat(date_str)
+                        date_formatted = date.strftime("%a, %d %b %Y %H:%M:%S %z")
+                    except (ValueError, TypeError):
+                        date_formatted = date_str
+                else:
+                    date_formatted = datetime.datetime.now().strftime(
+                        "%a, %d %b %Y %H:%M:%S %z"
+                    )
+
+                # 构建符合RFC标准的邮件内容
+                placeholder_content = f"""From: {from_addr}
+To: {to_addr_str}
+Subject: {subject}
+Message-ID: {message_id}
+Date: {date_formatted}
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+[此邮件的原始内容不可用，这是根据元数据生成的占位内容]
+"""
+                # 记录信息并返回
+                logger.warning(f"未找到邮件文件，返回生成的占位内容: {message_id}")
+                return placeholder_content
+            except Exception as e:
+                logger.error(f"生成占位邮件内容时出错: {e}")
+                import traceback
+
+                logger.error(f"异常详情: {traceback.format_exc()}")
+
+            # 如果所有尝试都失败
+            logger.error(
+                f"未找到邮件内容文件: {message_id}, 尝试的路径: {metadata.get('content_path')}, {os.path.join(EMAIL_STORAGE_DIR, f'{safe_id}.eml')}"
+            )
+            return None
         except Exception as e:
             logger.error(f"获取邮件内容时出错: {e}")
+            import traceback
+
+            logger.error(f"异常详情: {traceback.format_exc()}")
             return None
 
     def get_emails(
@@ -507,10 +598,34 @@ class DatabaseHandler:
             query = "SELECT * FROM emails WHERE 1=1"
             params = []
 
-            # 用户过滤
+            # 用户过滤 - 使用更宽松的匹配方式，确保能找到邮件
             if user_email:
-                query += " AND (to_addrs LIKE ? OR from_addr = ?)"
-                params.extend([f'%"{user_email}"%', user_email])
+                # 使用多种匹配方式，确保能找到所有相关邮件
+                query += """ AND (
+                    to_addrs LIKE ? OR
+                    to_addrs LIKE ? OR
+                    to_addrs LIKE ? OR
+                    to_addrs LIKE ? OR
+                    to_addrs LIKE ? OR
+                    from_addr = ? OR
+                    from_addr LIKE ?
+                )"""
+                params.extend(
+                    [
+                        f'%"address":"{user_email}"%',  # 匹配JSON中的address字段
+                        f'%"{user_email}"%',  # 匹配JSON中的简单字符串
+                        f"%<{user_email}>%",  # 匹配尖括号格式
+                        f"%{user_email}%",  # 宽松匹配
+                        f'%"email":"{user_email}"%',  # 匹配可能的email字段
+                        user_email,  # 精确匹配发件人
+                        f"%{user_email}%",  # 宽松匹配发件人
+                    ]
+                )
+                logger.info(f"查询邮件，用户邮箱: {user_email}")
+
+                # 添加调试日志
+                logger.debug(f"SQL查询: {query}")
+                logger.debug(f"参数: {params}")
 
             # 删除状态过滤
             if not include_deleted:
@@ -533,8 +648,38 @@ class DatabaseHandler:
                 # 转换为字典
                 item = dict(row)
 
-                # 解析JSON字段
-                item["to_addrs"] = json.loads(item["to_addrs"])
+                # 解析JSON字段，处理多种可能的格式
+                try:
+                    to_addrs_raw = item["to_addrs"]
+                    # 尝试解析为JSON
+                    to_addrs = json.loads(to_addrs_raw)
+
+                    # 判断解析结果的类型并处理
+                    if isinstance(to_addrs, list):
+                        # 可能是简单字符串列表，也可能是对象列表
+                        if (
+                            to_addrs
+                            and isinstance(to_addrs[0], dict)
+                            and "address" in to_addrs[0]
+                        ):
+                            # 转换为简单地址列表以便统一处理
+                            to_addrs = [
+                                addr["address"]
+                                for addr in to_addrs
+                                if "address" in addr
+                            ]
+                    elif isinstance(to_addrs, dict):
+                        # 单个地址对象
+                        to_addrs = (
+                            [to_addrs["address"]] if "address" in to_addrs else []
+                        )
+
+                    item["to_addrs"] = to_addrs
+                except (json.JSONDecodeError, TypeError, KeyError):
+                    # 如果JSON解析失败，尝试其他格式处理，或保持原始值
+                    logger.warning(f"解析to_addrs字段失败: {to_addrs_raw}")
+                    # 保持原始值
+                    item["to_addrs"] = [to_addrs_raw]
 
                 # 转换布尔值
                 item["is_read"] = bool(item["is_read"])
@@ -547,6 +692,9 @@ class DatabaseHandler:
             return results
         except Exception as e:
             logger.error(f"列出邮件时出错: {e}")
+            import traceback
+
+            logger.error(f"异常详情: {traceback.format_exc()}")
             return []
 
     def mark_email_as_read(self, message_id: str) -> bool:

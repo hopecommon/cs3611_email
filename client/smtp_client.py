@@ -19,6 +19,8 @@ from email.header import Header
 from typing import List, Dict, Optional, Union, BinaryIO, Tuple, Literal
 import mimetypes
 from pathlib import Path
+import re
+import uuid
 
 from common.utils import (
     setup_logging,
@@ -410,13 +412,23 @@ class SMTPClient:
             email: 已发送的邮件对象
         """
         try:
-            # 生成文件名
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            safe_subject = safe_filename(email.subject)
-            if len(safe_subject) > 50:
-                safe_subject = safe_subject[:47] + "..."
+            # 确保邮件有Message-ID
+            if not email.message_id:
+                # 如果没有Message-ID，生成一个
+                email.message_id = f"<{uuid.uuid4()}@localhost>"
+                logger.info(f"为邮件生成Message-ID: {email.message_id}")
 
-            filename = f"{timestamp}_{safe_subject}.eml"
+            # 清理邮件ID，移除尖括号和特殊字符
+            message_id = email.message_id.strip("<>").replace("@", "_at_")
+            message_id = re.sub(r'[\\/*?:"<>|]', "_", message_id)
+
+            # 使用邮件ID作为文件名的一部分
+            safe_subject = safe_filename(email.subject)
+            if len(safe_subject) > 30:
+                safe_subject = safe_subject[:27] + "..."
+
+            # 与POP3服务器保持一致的命名方式
+            filename = f"{message_id}.eml"
             filepath = os.path.join(self.sent_emails_dir, filename)
 
             # 保存为.eml文件

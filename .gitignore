@@ -191,3 +191,5 @@ tests/test_config.py
 # 其他敏感文件
 .env
 *.log
+test_emails/
+received_emails/

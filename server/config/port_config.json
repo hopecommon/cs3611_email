@@ -1,0 +1,6 @@
+{
+    "pop3_port": 110,
+    "pop3_ssl_port": 995,
+    "smtp_port": 25,
+    "smtp_ssl_port": 465
+}

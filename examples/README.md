@@ -31,6 +31,10 @@
 
 1. **receive_emails.py** - 接收邮件
    ```bash
+   # 首先需要导入测试邮件
+   python tools/import_emails.py --force --verbose
+   
+   # 然后运行接收邮件脚本
    python examples/receive_emails.py
    ```
    

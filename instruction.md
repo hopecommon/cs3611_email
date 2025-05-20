@@ -59,7 +59,8 @@
 ## 技术栈要求
 
 *   **协议标准**：SMTP (RFC 5321)、POP3 (RFC 1939)、MIME (RFC 2045)；
-*   **编程语言**：Python (推荐使用 `smtplib`/`imaplib` 库)；
+*   **编程语言**：Python (推荐使用 `imaplib` 库)；
+*   **服务端实现**：`aiosmtpd` 包（替代已弃用的 `smtpd` 模块）；
 *   **安全机制**：SSL/TLS、PGP (GnuPG 库)；
 *   **数据存储**：SQLite (邮件元数据)、文件系统 (`.eml` 原始邮件)。
 

@@ -28,6 +28,7 @@ from common.config import (
     SPAM_FILTER_ENABLED,
     PGP_ENABLED,
     RECALL_ENABLED,
+    MAX_CONNECTIONS,
 )
 
 # 设置日志
@@ -48,6 +49,12 @@ def parse_args():
     server_group = parser.add_argument_group("服务器选项")
     server_group.add_argument("--smtp", action="store_true", help="启动SMTP服务器")
     server_group.add_argument("--pop3", action="store_true", help="启动POP3服务器")
+    server_group.add_argument(
+        "--basic", action="store_true", help="使用基础SMTP服务器（基于aiosmtpd）"
+    )
+    server_group.add_argument(
+        "--auth", action="store_true", help="使用认证SMTP服务器（支持SSL和认证）"
+    )
     server_group.add_argument("--host", type=str, help="服务器主机名")
     server_group.add_argument("--port", type=int, help="服务器端口")
 
@@ -193,17 +200,93 @@ def start_server(args):
     logger.info("启动服务器...")
 
     if args.smtp:
-        host = args.host or SMTP_SERVER["host"]
-        port = args.port or SMTP_SERVER["port"]
-        logger.info(f"启动SMTP服务器: {host}:{port}")
-        # TODO: 导入并启动SMTP服务器
-        print(f"SMTP服务器功能尚未实现 ({host}:{port})")
+        # 检查服务器类型
+        use_basic = (
+            args.basic or os.environ.get("USE_BASIC_SMTP", "False").lower() == "true"
+        )
+        use_auth = (
+            args.auth or os.environ.get("USE_AUTH_SMTP", "False").lower() == "true"
+        )
+
+        # 根据服务器类型设置主机和端口
+        if use_basic or use_auth:
+            host = args.host or "localhost"
+            port = args.port or SMTP_SERVER["port"]
+        else:
+            host = args.host or SMTP_SERVER["host"]
+            port = args.port or SMTP_SERVER["port"]
+
+        if use_auth:
+            # 使用认证SMTP服务器
+            from server.authenticated_smtp_server import AuthenticatedSMTPServer
+
+            logger.info(f"启动认证SMTP服务器: {host}:{port}")
+
+            # 创建并启动认证SMTP服务器
+            smtp_server = AuthenticatedSMTPServer(
+                host=host, port=port, require_auth=True, use_ssl=True
+            )
+            smtp_server.start()
+
+            # 保持程序运行，直到用户中断
+            try:
+                import asyncio
+
+                # 显示实际使用的端口（可能与指定的端口不同）
+                actual_port = smtp_server.port
+                print(f"认证SMTP服务器已启动: {host}:{actual_port}")
+                print(f"服务器绑定地址: {host}:{actual_port}")
+                print(f"认证要求: 启用")
+                print(f"SSL: 启用")
+                print("按Ctrl+C停止服务器")
+
+                # 使用asyncio事件循环运行服务器
+                loop = asyncio.get_event_loop()
+                loop.run_forever()
+            except KeyboardInterrupt:
+                print("正在停止服务器...")
+                smtp_server.stop()
+        elif use_basic:
+            # 使用基础SMTP服务器
+            from server.basic_smtp_server import BasicSMTPServer
+
+            logger.info(f"启动基础SMTP服务器: {host}:{port}")
+
+            # 创建并启动基础SMTP服务器
+            smtp_server = BasicSMTPServer(host=host, port=port, require_auth=False)
+            smtp_server.start()
+
+            # 打印认证状态
+            print(f"认证状态: {'需要认证' if smtp_server.require_auth else '无需认证'}")
+
+            # 保持程序运行，直到用户中断
+            try:
+                import asyncio
+
+                # 显示实际使用的端口（可能与指定的端口不同）
+                actual_port = smtp_server.port
+                print(f"基础SMTP服务器已启动: {host}:{actual_port}")
+                print(f"服务器绑定地址: {host}:{actual_port}")
+                print("按Ctrl+C停止服务器")
+
+                # 使用asyncio事件循环运行服务器
+                loop = asyncio.get_event_loop()
+                loop.run_forever()
+            except KeyboardInterrupt:
+                print("正在停止服务器...")
+                smtp_server.stop()
+
     elif args.pop3:
+        from server.pop3_server import POP3Server
+
         host = args.host or POP3_SERVER["host"]
         port = args.port or POP3_SERVER["port"]
         logger.info(f"启动POP3服务器: {host}:{port}")
-        # TODO: 导入并启动POP3服务器
-        print(f"POP3服务器功能尚未实现 ({host}:{port})")
+
+        # 创建并启动POP3服务器
+        pop3_server = POP3Server(host=host, port=port, max_connections=MAX_CONNECTIONS)
+        pop3_server.start()
+
     else:
         logger.error("未指定服务器类型")
         print("请指定服务器类型: --smtp 或 --pop3")

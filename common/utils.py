@@ -15,13 +15,16 @@ from common.config import LOG_LEVEL, LOG_FILE
 
 
 # 设置日志
-def setup_logging(name: str, level: Optional[str] = None) -> logging.Logger:
+def setup_logging(
+    name: str, level: Optional[str] = None, verbose: bool = False
+) -> logging.Logger:
     """
     设置并返回一个配置好的日志记录器
 
     Args:
         name: 日志记录器名称
         level: 日志级别，如果为None则使用配置文件中的级别
+        verbose: 是否启用详细日志，如果为True则使用DEBUG级别
 
     Returns:
         配置好的日志记录器
@@ -29,12 +32,20 @@ def setup_logging(name: str, level: Optional[str] = None) -> logging.Logger:
     if level is None:
         level = LOG_LEVEL
 
+    # 如果verbose为True，使用DEBUG级别
+    if verbose:
+        level = "DEBUG"
+
     # 确保日志目录存在
     os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
     # 创建日志记录器
     logger = logging.getLogger(name)
     logger.setLevel(getattr(logging, level))
+
+    # 如果logger已经有处理器，不再添加
+    if logger.handlers:
+        return logger
 
     # 文件处理器 - 使用UTF-8编码
     file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")

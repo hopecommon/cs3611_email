@@ -18,6 +18,7 @@ from common.utils import setup_logging
 from common.config import POP3_SERVER, EMAIL_STORAGE_DIR
 from client.pop3_client import POP3Client
 from server.db_handler import DatabaseHandler
+from common.port_config import resolve_port
 
 # 设置日志
 logger = setup_logging("pop3_cli")
@@ -54,6 +55,12 @@ def parse_args():
     parser.add_argument("--save-dir", type=str, help="保存邮件的目录")
     parser.add_argument("--config", type=str, help="配置文件路径")
     parser.add_argument("--verbose", action="store_true", help="显示详细信息")
+    parser.add_argument(
+        "--timeout", type=int, default=120, help="连接超时时间（秒），默认为120秒"
+    )
+    parser.add_argument(
+        "--max-retries", type=int, default=3, help="最大重试次数，默认为3次"
+    )
 
     return parser.parse_args()
 
@@ -159,8 +166,9 @@ def print_email(email, verbose: bool = False):
 def main():
     """主函数"""
     args = parse_args()
+    setup_logging("pop3_cli", verbose=args.verbose)
 
-    # 加载配置文件
+    # 加载配置
     config = {}
     if args.config:
         config = load_config(args.config)
@@ -168,9 +176,28 @@ def main():
     # 获取POP3设置
     pop3_config = config.get("pop3", {})
     host = args.host or pop3_config.get("host") or POP3_SERVER["host"]
-    port = args.port or pop3_config.get("port") or POP3_SERVER["port"]
     use_ssl = args.ssl or pop3_config.get("use_ssl") or POP3_SERVER["use_ssl"]
-    ssl_port = args.ssl_port or pop3_config.get("ssl_port") or POP3_SERVER["ssl_port"]
+
+    # 使用统一的端口管理逻辑
+    cmd_port = args.port if args.port is not None else None
+    cmd_ssl_port = args.ssl_port if args.ssl_port is not None else None
+
+    # 根据是否使用SSL选择要解析的端口
+    if use_ssl:
+        port, changed, message = resolve_port(
+            "pop3", cmd_ssl_port, use_ssl=True, auto_detect=False, is_client=True
+        )
+    else:
+        port, changed, message = resolve_port(
+            "pop3", cmd_port, use_ssl=False, auto_detect=False, is_client=True
+        )
+
+    if port == 0:
+        print(f"错误: {message}")
+        sys.exit(1)
+
+    if changed:
+        print(f"提示: {message}")
 
     # 获取认证信息
     username = args.username or pop3_config.get("username")
@@ -192,14 +219,15 @@ def main():
         host=host,
         port=port,
         use_ssl=use_ssl,
-        ssl_port=ssl_port,
         username=username,
         password=password,
+        timeout=args.timeout,
+        max_retries=args.max_retries,
     )
 
     try:
         # 连接到服务器
-        print(f"正在连接到POP3服务器: {host}:{port if not use_ssl else ssl_port}")
+        print(f"正在连接到POP3服务器: {host}:{port}")
         pop3_client.connect()
 
         # 执行操作
@@ -231,19 +259,37 @@ def main():
         elif args.retrieve_all:
             # 获取所有邮件
             print("正在获取所有邮件...")
-            emails = pop3_client.retrieve_all_emails()
+            try:
+                emails = pop3_client.retrieve_all_emails()
 
-            if emails:
-                print(f"已获取{len(emails)}封邮件")
-                for i, email in enumerate(emails, 1):
-                    print(f"\n邮件 {i}/{len(emails)}:")
-                    print_email(email, args.verbose)
+                if emails:
+                    print(f"\n已成功获取{len(emails)}封邮件")
+                    for i, email in enumerate(emails, 1):
+                        try:
+                            print(f"\n邮件 {i}/{len(emails)}:")
+                            print_email(email, args.verbose)
 
-                    # 保存邮件
-                    eml_path = pop3_client.save_email_as_eml(email, save_dir)
-                    print(f"邮件已保存为: {eml_path}")
-            else:
-                print("没有邮件可获取")
+                            # 保存邮件
+                            try:
+                                eml_path = pop3_client.save_email_as_eml(
+                                    email, save_dir
+                                )
+                                print(f"邮件已保存为: {eml_path}")
+                            except Exception as save_err:
+                                logger.error(f"保存邮件失败: {save_err}")
+                                print(f"保存邮件失败: {save_err}")
+                        except Exception as e:
+                            logger.error(f"处理邮件 {i} 时出错: {e}")
+                            print(f"处理邮件 {i} 时出错: {e}")
+                            continue
+                else:
+                    print("没有邮件可获取或获取过程中出现错误")
+            except Exception as e:
+                logger.error(f"获取所有邮件失败: {e}")
+                print(f"获取所有邮件失败: {e}")
+                import traceback
+
+                logger.error(f"异常详情: {traceback.format_exc()}")
 
         elif args.delete is not None:
             # 删除指定邮件
@@ -265,6 +311,14 @@ def main():
     except Exception as e:
         logger.error(f"操作失败: {e}")
         print(f"操作失败: {e}")
+        if "connection refused" in str(e).lower():
+            print(f"连接被拒绝，请检查服务器 {host}:{port} 是否正在运行")
+            print("建议运行 python check_ports.py --check 检查端口配置")
+        elif "authentication failed" in str(e).lower():
+            print("认证失败，请检查用户名和密码是否正确")
+        import traceback
+
+        logger.debug(f"错误详情: {traceback.format_exc()}")
     finally:
         # 断开连接
         pop3_client.disconnect()

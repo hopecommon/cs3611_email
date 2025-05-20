@@ -51,8 +51,17 @@ SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", os.path.join(BASE_DIR, "certs", "server
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "True").lower() == "true"
 
 # 并发配置
-MAX_CONNECTIONS = int(os.getenv("MAX_CONNECTIONS", 10))
+MAX_CONNECTIONS = int(os.getenv("MAX_CONNECTIONS", 100))  # 支持至少60个并发连接
 CONNECTION_TIMEOUT = int(os.getenv("CONNECTION_TIMEOUT", 60))  # 秒
+THREAD_POOL_SIZE = int(os.getenv("THREAD_POOL_SIZE", 120))  # 线程池大小
+SOCKET_BACKLOG = int(os.getenv("SOCKET_BACKLOG", 100))  # 套接字等待队列大小
+CONNECTION_IDLE_TIMEOUT = int(
+    os.getenv("CONNECTION_IDLE_TIMEOUT", 300)
+)  # 空闲连接超时（秒）
+GRACEFUL_SHUTDOWN_TIMEOUT = int(
+    os.getenv("GRACEFUL_SHUTDOWN_TIMEOUT", 30)
+)  # 优雅关闭超时（秒）
+MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", 10))  # 性能监控间隔（秒）
 
 # 日志配置
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
