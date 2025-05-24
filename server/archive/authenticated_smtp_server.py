@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging
 from common.config import AUTH_REQUIRED, EMAIL_STORAGE_DIR, SSL_CERT_FILE, SSL_KEY_FILE
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import EmailService as DatabaseHandler
 from server.user_auth import UserAuth
 from common.port_config import resolve_port, is_port_available, find_available_port
 
@@ -43,7 +43,7 @@ class AuthenticatedSMTPHandler:
             db_handler: 数据库处理器，如果为None则创建一个新的
             server: SMTP服务器实例，用于访问服务器配置
         """
-        self.db_handler = db_handler or DatabaseHandler()
+        self.db_handler = db_handler or EmailService()
         self.user_auth = UserAuth()
         self._server = server  # 保存服务器引用，用于访问配置
 
@@ -305,7 +305,7 @@ class AuthenticatedSMTPServer:
 
         self.host = host
         self.port = port
-        self.db_handler = db_handler or DatabaseHandler()
+        self.db_handler = db_handler or EmailService()
         self.require_auth = require_auth
         self.use_ssl = use_ssl
         self.ssl_cert_file = ssl_cert_file

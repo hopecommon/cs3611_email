@@ -13,8 +13,8 @@ from typing import List, Dict, Any, Optional
 from common.utils import setup_logging
 from common.models import Email, EmailAddress, Attachment, EmailStatus
 from client.smtp_client import SMTPClient
-from client.pop3_client import POP3Client
-from server.email_db import EmailDB
+from client.pop3_client_refactored import POP3Client
+from server.new_db_handler import EmailService
 from common.config import SMTP_SERVER, POP3_SERVER, EMAIL_STORAGE_DIR, DB_PATH
 
 # 设置日志
@@ -26,7 +26,7 @@ class EmailCLI:
 
     def __init__(self):
         """初始化命令行界面"""
-        self.db = EmailDB()  # 使用新的EmailDB接口
+        self.db = EmailService()  # 使用新的EmailService接口
         self.smtp_client = None
         self.pop3_client = None
         self.current_email = None
@@ -517,9 +517,9 @@ class EmailCLI:
         # 从数据库获取邮件列表
         try:
             if self.current_folder == "sent":
-                emails = self.db_handler.get_sent_emails()
+                emails = self.db.list_sent_emails()
             else:
-                emails = self.db_handler.get_emails()
+                emails = self.db.list_emails()
 
             if not emails:
                 print(f"{folder}中没有邮件")
@@ -536,7 +536,7 @@ class EmailCLI:
             for i, email in enumerate(emails):
                 status = "已读" if email.get("is_read") else "未读"
                 date = email.get("date", "")
-                sender = email.get("sender", "")
+                sender = email.get("from_addr", email.get("sender", ""))
                 subject = email.get("subject", "")
 
                 print(f"{i+1:<5} {status:<4} {date:<20} {sender:<30} {subject:<40}")
@@ -584,9 +584,9 @@ class EmailCLI:
             # 根据邮件类型选择不同的获取方法
             email_type = self.current_email.get("type", "received")
             if email_type == "sent":
-                content_str = self.db_handler.get_sent_email_content(message_id)
+                content_str = self.db.get_sent_email_content(message_id)
             else:
-                content_str = self.db_handler.get_email_content(message_id)
+                content_str = self.db.get_email_content(message_id)
 
             if content_str:
                 # 解析邮件内容
@@ -682,7 +682,7 @@ class EmailCLI:
         # 标记为已读
         try:
             if not self.current_email.get("is_read"):
-                self.db.mark_as_read(self.current_email.get("message_id"))
+                self.db.update_email(self.current_email.get("message_id"), is_read=True)
                 print("\n邮件已标记为已读")
         except Exception as e:
             print(f"标记邮件为已读时出错: {e}")
@@ -738,7 +738,7 @@ class EmailCLI:
         for i, email in enumerate(self.email_list):
             status = "已读" if email.get("is_read") else "未读"
             date = email.get("date", "")
-            sender = email.get("sender", "")
+            sender = email.get("from_addr", email.get("sender", ""))
             subject = email.get("subject", "")
 
             print(f"{i+1:<5} {status:<4} {date:<20} {sender:<30} {subject:<40}")
@@ -760,7 +760,7 @@ class EmailCLI:
                     # 删除邮件
                     try:
                         message_id = email.get("message_id")
-                        self.db.mark_as_deleted(message_id)
+                        self.db.update_email(message_id, is_deleted=True)
                         print("邮件已标记为删除")
 
                         # 更新邮件列表
@@ -791,7 +791,7 @@ class EmailCLI:
         for i, email in enumerate(self.email_list):
             status = "已读" if email.get("is_read") else "未读"
             date = email.get("date", "")
-            sender = email.get("sender", "")
+            sender = email.get("from_addr", email.get("sender", ""))
             subject = email.get("subject", "")
 
             print(f"{i+1:<5} {status:<4} {date:<20} {sender:<30} {subject:<40}")
@@ -811,11 +811,11 @@ class EmailCLI:
                 try:
                     message_id = email.get("message_id")
                     if is_read:
-                        # 使用EmailDB的mark_as_unread方法
-                        self.db.mark_as_unread(message_id)
+                        # 使用EmailService的update_email方法
+                        self.db.update_email(message_id, is_read=False)
                         print("邮件已标记为未读")
                     else:
-                        self.db.mark_as_read(message_id)
+                        self.db.update_email(message_id, is_read=True)
                         print("邮件已标记为已读")
 
                     # 更新邮件列表中的状态
@@ -842,7 +842,7 @@ class EmailCLI:
 
         try:
             # 搜索邮件
-            emails = self.db.search(sender, search_in=["sender"])
+            emails = self.db.search_emails(sender, search_fields=["from_addr"])
 
             if not emails:
                 print(f"未找到发件人包含 '{sender}' 的邮件")
@@ -868,7 +868,7 @@ class EmailCLI:
 
         try:
             # 搜索邮件
-            emails = self.db.search(subject, search_in=["subject"])
+            emails = self.db.search_emails(subject, search_fields=["subject"])
 
             if not emails:
                 print(f"未找到主题包含 '{subject}' 的邮件")
@@ -893,8 +893,11 @@ class EmailCLI:
             return
 
         try:
-            # 搜索邮件
-            emails = self.db.search(content, search_content=True)
+            # 搜索邮件，暂时使用主题和发件人字段搜索
+            # 注意：新的search_emails还不直接支持内容搜索，这里使用基本字段搜索
+            emails = self.db.search_emails(
+                content, search_fields=["subject", "from_addr"]
+            )
 
             if not emails:
                 print(f"未找到内容包含 '{content}' 的邮件")
@@ -920,10 +923,28 @@ class EmailCLI:
 
         try:
             # 验证日期格式
-            datetime.datetime.strptime(date, "%Y-%m-%d")
+            target_date = datetime.datetime.strptime(date, "%Y-%m-%d")
 
-            # 搜索邮件 - 使用 EmailDB 的 search_by_date 方法
-            emails = self.db.search_by_date(date)
+            # 使用新的EmailService获取所有邮件然后过滤
+            all_emails = self.db.list_emails(limit=10000)  # 获取大量邮件
+
+            # 按日期过滤
+            emails = []
+            for email in all_emails:
+                email_date_str = email.get("date", "")
+                try:
+                    if email_date_str:
+                        # 尝试解析日期
+                        if isinstance(email_date_str, str):
+                            email_date = datetime.datetime.fromisoformat(email_date_str)
+                        else:
+                            continue
+
+                        # 检查是否是同一天
+                        if email_date.date() == target_date.date():
+                            emails.append(email)
+                except (ValueError, TypeError):
+                    continue
 
             if not emails:
                 print(f"未找到日期为 '{date}' 的邮件")
@@ -977,19 +998,39 @@ class EmailCLI:
                 print("结束日期格式无效，将被忽略")
 
         try:
-            # 搜索邮件 - 使用 EmailDB 的 search 方法
+            # 搜索邮件 - 使用新的EmailService的search_emails方法
             # 构建搜索关键词
-            query = " ".join(
-                [v for _, v in search_params.items() if isinstance(v, str)]
-            )
-            if not query:
-                query = "*"  # 使用通配符表示搜索所有
+            search_terms = []
+            if sender:
+                search_terms.append(sender)
+            if subject:
+                search_terms.append(subject)
+            if content:
+                search_terms.append(content)
 
-            emails = self.db.search(
-                query,
-                include_sent=include_sent,
-                include_received=include_received,
-            )
+            if search_terms:
+                query = " ".join(search_terms)
+                emails = self.db.search_emails(
+                    query,
+                    include_sent=include_sent,
+                    include_received=include_received,
+                    limit=100,
+                )
+            else:
+                # 如果没有搜索条件，获取所有邮件
+                received_emails = (
+                    self.db.list_emails(limit=100) if include_received else []
+                )
+                sent_emails = (
+                    self.db.list_sent_emails(limit=100) if include_sent else []
+                )
+                emails = received_emails + sent_emails
+
+                # 添加type字段以区分邮件类型
+                for email in received_emails:
+                    email["type"] = "received"
+                for email in sent_emails:
+                    email["type"] = "sent"
 
             if not emails:
                 print("未找到符合条件的邮件")
@@ -1017,7 +1058,7 @@ class EmailCLI:
         for i, email in enumerate(emails):
             status = "已读" if email.get("is_read") else "未读"
             date = email.get("date", "")
-            sender = email.get("sender", "")
+            sender = email.get("from_addr", email.get("sender", ""))
             subject = email.get("subject", "")
 
             print(f"{i+1:<5} {status:<4} {date:<20} {sender:<30} {subject:<40}")

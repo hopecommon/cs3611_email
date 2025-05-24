@@ -16,8 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging
 from common.config import POP3_SERVER, EMAIL_STORAGE_DIR
-from client.pop3_client import POP3Client
-from server.db_handler import DatabaseHandler
+from client.pop3_client_refactored import POP3Client
 from common.port_config import resolve_port
 
 # 设置日志
@@ -118,20 +117,54 @@ def print_email(email, verbose: bool = False):
     """
     print("=" * 50)
     try:
-        print(f"主题: {email.subject}")
+        print(f"主题: {email.subject or '(无主题)'}")
     except UnicodeEncodeError:
         # 安全地处理无法显示的字符
-        print(f"主题: {email.subject.encode('gbk', errors='replace').decode('gbk')}")
-
-    print(f"发件人: {email.from_addr.name} <{email.from_addr.address}>")
-    print(
-        f"收件人: {', '.join([f'{addr.name} <{addr.address}>' for addr in email.to_addrs])}"
-    )
-    if email.cc_addrs:
         print(
-            f"抄送: {', '.join([f'{addr.name} <{addr.address}>' for addr in email.cc_addrs])}"
+            f"主题: {(email.subject or '(无主题)').encode('gbk', errors='replace').decode('gbk')}"
         )
-    print(f"日期: {email.date}")
+
+    # 安全地处理发件人信息
+    if email.from_addr:
+        from_name = email.from_addr.name or ""
+        from_address = email.from_addr.address or "unknown@localhost"
+        if from_name:
+            print(f"发件人: {from_name} <{from_address}>")
+        else:
+            print(f"发件人: {from_address}")
+    else:
+        print("发件人: (未知发件人)")
+
+    # 安全地处理收件人信息
+    if email.to_addrs:
+        to_list = []
+        for addr in email.to_addrs:
+            if addr:
+                addr_name = addr.name or ""
+                addr_address = addr.address or ""
+                if addr_name:
+                    to_list.append(f"{addr_name} <{addr_address}>")
+                else:
+                    to_list.append(addr_address)
+        print(f"收件人: {', '.join(to_list) if to_list else '(未知收件人)'}")
+    else:
+        print("收件人: (未知收件人)")
+
+    # 安全地处理抄送信息
+    if email.cc_addrs:
+        cc_list = []
+        for addr in email.cc_addrs:
+            if addr:
+                addr_name = addr.name or ""
+                addr_address = addr.address or ""
+                if addr_name:
+                    cc_list.append(f"{addr_name} <{addr_address}>")
+                else:
+                    cc_list.append(addr_address)
+        if cc_list:
+            print(f"抄送: {', '.join(cc_list)}")
+
+    print(f"日期: {email.date or '(未知日期)'}")
 
     if email.attachments:
         print(f"附件: {len(email.attachments)}个")

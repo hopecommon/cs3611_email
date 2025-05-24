@@ -216,7 +216,7 @@ print(f"邮件发送{'成功' if result else '失败'}")
 ### 接收测试邮件
 
 ```python
-from client.pop3_client import POP3Client
+from client.pop3_client_refactored import POP3Client
 
 # 创建POP3客户端
 pop3_client = POP3Client(
@@ -255,7 +255,7 @@ pop3_client.disconnect()
 
 ```python
 import time
-from client.pop3_client import POP3Client
+from client.pop3_client_refactored import POP3Client
 
 # 创建POP3客户端
 pop3_client = POP3Client(

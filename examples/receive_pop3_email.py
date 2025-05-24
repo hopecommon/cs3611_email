@@ -12,7 +12,7 @@ from pathlib import Path
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from client.pop3_client import POP3Client
+from client.pop3_client_refactored import POP3Client
 from common.utils import setup_logging
 from common.port_config import get_service_port
 

@@ -1,5 +1,5 @@
 {
-    "pop3_port": 12000,
+    "pop3_port": 8110,
     "pop3_ssl_port": 995,
     "smtp_port": 8025,
     "smtp_ssl_port": 465

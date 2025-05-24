@@ -193,3 +193,6 @@ tests/test_config.py
 *.log
 test_emails/
 received_emails/
+tests_backup/
+examples_backup/
+migration_backups/

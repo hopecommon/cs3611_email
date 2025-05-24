@@ -21,7 +21,7 @@ from common.config import (
     SSL_KEY_FILE,
 )
 from server.user_auth import UserAuth
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
 
 # 设置日志
 logger = setup_logging("init_project")
@@ -35,6 +35,10 @@ def create_directories():
         os.path.join("logs"),
         os.path.join("certs"),
         os.path.join("data", "emails"),
+        os.path.join("data", "emails", "inbox"),
+        os.path.join("data", "emails", "sent"),
+        os.path.join("data", "emails", "drafts"),
+        os.path.join("data", "emails", "trash"),
     ]
 
     for directory in directories:
@@ -56,6 +60,7 @@ def create_database():
         ("admin", "admin@example.com", "admin123", "Administrator"),
         ("user1", "user1@example.com", "user123", "Test User 1"),
         ("user2", "user2@example.com", "user123", "Test User 2"),
+        ("testuser", "testuser@example.com", "testpass", "Test User"),
     ]
 
     for username, email, password, full_name in test_users:

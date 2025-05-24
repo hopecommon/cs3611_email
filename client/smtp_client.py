@@ -31,8 +31,9 @@ from common.utils import (
 from common.models import Email, EmailAddress, Attachment, EmailStatus
 from common.config import SMTP_SERVER, EMAIL_STORAGE_DIR
 from client.mime_handler import MIMEHandler
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import EmailService
 from client.socket_utils import close_socket_safely, close_ssl_connection_safely
+from common.email_format_handler import EmailFormatHandler
 
 # 设置日志
 logger = setup_logging("smtp_client")
@@ -87,8 +88,8 @@ class SMTPClient:
         if self.save_sent_emails:
             os.makedirs(self.sent_emails_dir, exist_ok=True)
 
-        # 创建数据库处理器
-        self.db_handler = DatabaseHandler()
+        # 创建邮件服务
+        self.email_service = EmailService()
 
     def connect(self) -> None:
         """
@@ -366,8 +367,8 @@ class SMTPClient:
         if not email.from_addr or not email.to_addrs:
             raise ValueError("邮件必须包含发件人和至少一个收件人")
 
-        # 创建邮件消息
-        msg = self._create_mime_message(email)
+        # 使用统一格式处理器创建邮件消息
+        msg = EmailFormatHandler.create_mime_message(email)
 
         # 获取所有收件人
         recipients = [addr.address for addr in email.to_addrs]
@@ -435,7 +436,14 @@ class SMTPClient:
             MIMEHandler.save_as_eml(email, filepath)
 
             # 保存元数据到数据库
-            self.db_handler.save_sent_email_metadata(email, filepath)
+            self.email_service.save_sent_email(
+                message_id=email.message_id,
+                from_addr=email.from_addr.address,
+                to_addrs=[addr.address for addr in email.to_addrs],
+                subject=email.subject,
+                content_path=filepath,
+                date=email.date,
+            )
 
             logger.info(f"已保存已发送邮件: {filepath}")
         except Exception as e:
@@ -457,12 +465,48 @@ class SMTPClient:
 
         # 确保所有字符串都是 UTF-8 编码
         subject = str(email.subject) if email.subject else ""
-        from_name = str(email.from_addr.name) if email.from_addr.name else ""
-        from_addr = str(email.from_addr.address) if email.from_addr.address else ""
 
-        # 设置基本头部
-        msg["Subject"] = Header(subject, "utf-8")
-        msg["From"] = formataddr((from_name, from_addr))
+        # 安全地处理发件人信息
+        if email.from_addr:
+            from_name = str(email.from_addr.name) if email.from_addr.name else ""
+            from_addr = str(email.from_addr.address) if email.from_addr.address else ""
+        else:
+            from_name = ""
+            from_addr = "unknown@localhost"
+
+        # 设置基本头部 - 严格遵循RFC 2047标准
+        if subject:
+            # 强制编码所有包含非ASCII字符的Subject
+            try:
+                subject.encode("ascii")
+                # 纯ASCII，直接设置
+                msg["Subject"] = subject
+            except UnicodeEncodeError:
+                # 包含非ASCII字符，强制使用Base64编码
+                from email.header import Header
+
+                # 强制使用Base64编码，确保符合RFC 2047标准
+                import base64
+
+                encoded_subject = base64.b64encode(subject.encode("utf-8")).decode(
+                    "ascii"
+                )
+                msg["Subject"] = f"=?utf-8?B?{encoded_subject}?="
+
+        # 处理发件人地址 - 确保名称部分正确编码
+        if from_name:
+            try:
+                from_name.encode("ascii")
+                # 纯ASCII名称
+                msg["From"] = formataddr((from_name, from_addr))
+            except UnicodeEncodeError:
+                # 包含非ASCII字符，需要编码名称
+                from email.header import Header
+
+                encoded_name = Header(from_name, "utf-8")
+                msg["From"] = formataddr((str(encoded_name), from_addr))
+        else:
+            msg["From"] = from_addr
 
         # 处理收件人
         to_addrs = []

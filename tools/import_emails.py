@@ -17,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging, safe_print
 from common.config import EMAIL_STORAGE_DIR
-from server.db_handler import DatabaseHandler
-from client.pop3_client import POP3Client
+from server.new_db_handler import EmailService as DatabaseHandler
+from client.pop3_client_refactored import POP3Client
 from client.mime_handler import MIMEHandler
 
 # 设置日志
@@ -221,7 +221,7 @@ def main():
     args = parse_args()
 
     # 创建数据库处理器
-    db_handler = DatabaseHandler()
+    db_handler = EmailService()
 
     # 导入接收的邮件
     received_count = import_received_emails(

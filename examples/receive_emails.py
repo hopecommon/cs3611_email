@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging
 from common.config import EMAIL_STORAGE_DIR
-from client.pop3_client import POP3Client
+from client.pop3_client_refactored import POP3Client
 
 # 设置日志
 logger = setup_logging("example_receive")

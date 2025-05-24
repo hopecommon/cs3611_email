@@ -430,6 +430,7 @@ class DatabaseHandler:
 
         根据邮件ID从文件系统中读取邮件内容。首先获取邮件元数据以找到内容文件路径，
         然后读取该文件的内容并返回。如果邮件不存在或读取失败，则返回None。
+        如果邮件内容缺少头部信息，会自动补充完整的邮件头部。
 
         Args:
             message_id: 邮件ID，格式通常为 "<identifier@domain>"
@@ -445,6 +446,7 @@ class DatabaseHandler:
                 return None
 
             # 尝试使用metadata中的content_path
+            content = None
             if metadata.get("content_path") and os.path.exists(
                 metadata["content_path"]
             ):
@@ -452,57 +454,64 @@ class DatabaseHandler:
                     with open(metadata["content_path"], "r", encoding="utf-8") as f:
                         content = f.read()
                     logger.debug(f"从内容路径读取邮件内容: {metadata['content_path']}")
-                    return content
                 except Exception as e:
                     logger.error(f"读取邮件内容时出错: {e}")
 
-            # 尝试使用标准化的ID查找文件
-            # 标准化处理：移除两端空格，去掉<>，@替换为_at_
-            safe_id = message_id.strip().strip("<>").replace("@", "_at_")
-            # 移除Windows文件系统不允许的字符
-            safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
-            # 确保没有前导或尾随空格
-            safe_id = safe_id.strip()
+            # 如果没有找到内容，尝试使用标准化的ID查找文件
+            if not content:
+                # 标准化处理：移除两端空格，去掉<>，@替换为_at_
+                safe_id = message_id.strip().strip("<>").replace("@", "_at_")
+                # 移除Windows文件系统不允许的字符
+                safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
+                # 确保没有前导或尾随空格
+                safe_id = safe_id.strip()
 
-            # 尝试打开文件
-            try:
-                filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_id}.eml")
-                if os.path.exists(filepath):
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        content = f.read()
-                    logger.debug(f"从标准化ID路径读取邮件内容: {filepath}")
-                    return content
-            except Exception as e:
-                logger.error(f"读取邮件内容时出错: {e}")
+                # 尝试打开文件
+                try:
+                    filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_id}.eml")
+                    if os.path.exists(filepath):
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        logger.debug(f"从标准化ID路径读取邮件内容: {filepath}")
+                except Exception as e:
+                    logger.error(f"读取邮件内容时出错: {e}")
+
+            # 如果找到了内容，检查并修复邮件格式
+            if content:
+                # 检查邮件是否有正确的头部格式
+                if not self._has_proper_email_headers(content):
+                    logger.debug(f"邮件缺少头部信息，正在补充: {message_id}")
+                    content = self._build_complete_email_content(metadata, content)
+
+                return content
 
             # 如果所有尝试都失败，尝试从数据库中重新生成邮件内容
             try:
                 # 提取关键信息，确保适当的错误处理
-                subject = metadata.get("subject", "")
-                from_addr = metadata.get("from_addr", "")
+                subject = metadata.get("subject", "(无主题)")
+                from_addr = metadata.get("from_addr", "(未知发件人)")
 
-                # 处理to_addrs，它可能是字符串、列表或JSON字符串
-                to_addrs = metadata.get("to_addrs", [])
-                if isinstance(to_addrs, str):
-                    try:
-                        to_addrs = json.loads(to_addrs)
-                    except (json.JSONDecodeError, TypeError):
-                        to_addrs = [to_addrs]
-
-                # 格式化收件人列表
-                if isinstance(to_addrs, list):
-                    if (
-                        to_addrs
-                        and isinstance(to_addrs[0], dict)
-                        and "address" in to_addrs[0]
-                    ):
-                        to_addr_str = ", ".join(
-                            addr["address"] for addr in to_addrs if "address" in addr
-                        )
+                # 提取收件人列表
+                to_addrs_json = metadata.get("to_addrs", "[]")
+                try:
+                    to_addrs = json.loads(to_addrs_json)
+                    if isinstance(to_addrs, list):
+                        if (
+                            to_addrs
+                            and isinstance(to_addrs[0], dict)
+                            and "address" in to_addrs[0]
+                        ):
+                            to_addr_str = ", ".join(
+                                addr["address"]
+                                for addr in to_addrs
+                                if "address" in addr
+                            )
+                        else:
+                            to_addr_str = ", ".join(str(addr) for addr in to_addrs)
                     else:
-                        to_addr_str = ", ".join(str(addr) for addr in to_addrs)
-                else:
-                    to_addr_str = str(to_addrs)
+                        to_addr_str = str(to_addrs)
+                except:
+                    to_addr_str = "(未知收件人)"
 
                 # 获取并格式化日期
                 date_str = metadata.get("date", "")
@@ -517,20 +526,8 @@ class DatabaseHandler:
                         "%a, %d %b %Y %H:%M:%S %z"
                     )
 
-                # 构建符合RFC标准的邮件内容
-                placeholder_content = f"""From: {from_addr}
-To: {to_addr_str}
-Subject: {subject}
-Message-ID: {message_id}
-Date: {date_formatted}
-MIME-Version: 1.0
-Content-Type: text/plain; charset="utf-8"
-
-[此邮件的原始内容不可用，这是根据元数据生成的占位内容]
-"""
                 # 记录信息并返回
                 logger.warning(f"未找到邮件文件，返回生成的占位内容: {message_id}")
-                return placeholder_content
             except Exception as e:
                 logger.error(f"生成占位邮件内容时出错: {e}")
                 import traceback
@@ -548,6 +545,238 @@ Content-Type: text/plain; charset="utf-8"
 
             logger.error(f"异常详情: {traceback.format_exc()}")
             return None
+
+    def _has_proper_email_headers(self, content: str) -> bool:
+        """
+        检查邮件内容是否有正确的头部格式
+
+        检查两个条件：
+        1. 是否包含基本的邮件头部字段
+        2. 头部格式是否符合RFC标准（头部字段之间不应有额外空行）
+
+        Args:
+            content: 邮件内容
+
+        Returns:
+            bool: 如果有正确的头部格式返回True，否则返回False
+        """
+        if not content:
+            return False
+
+        lines = content.split("\n")
+        has_headers = False
+        header_format_correct = True
+        header_count = 0
+
+        for i, line in enumerate(lines[:20]):  # 检查前20行，足够涵盖大部分头部
+            line_stripped = line.strip()
+
+            # 检查是否是头部字段
+            if line_stripped and ":" in line_stripped:
+                # 基本头部字段检查
+                if line_stripped.startswith(
+                    (
+                        "Subject:",
+                        "From:",
+                        "To:",
+                        "Date:",
+                        "Message-ID:",
+                        "Content-Type:",
+                        "MIME-Version:",
+                        "Content-Transfer-Encoding:",
+                    )
+                ):
+                    has_headers = True
+                    header_count += 1
+
+                    # 检查RFC格式：头部字段后面是否有不必要的空行
+                    if i + 1 < len(lines) and lines[i + 1].strip() == "":
+                        # 检查下一个非空行是否也是头部字段
+                        for j in range(i + 2, min(i + 5, len(lines))):
+                            if j < len(lines):
+                                next_line = lines[j].strip()
+                                if next_line:
+                                    # 如果下一个非空行也是头部字段，说明有不必要的空行
+                                    if ":" in next_line and next_line.startswith(
+                                        (
+                                            "Subject:",
+                                            "From:",
+                                            "To:",
+                                            "Date:",
+                                            "Message-ID:",
+                                            "Content-Type:",
+                                            "MIME-Version:",
+                                            "Content-Transfer-Encoding:",
+                                        )
+                                    ):
+                                        logger.debug(
+                                            f"检测到头部字段间有额外空行：第{i+1}行和第{j+1}行之间"
+                                        )
+                                        header_format_correct = False
+                                        break
+                                    else:
+                                        break
+            elif line_stripped == "" and header_count > 0:
+                # 遇到空行且已有头部字段，说明头部结束
+                break
+
+        # 只有当既有头部字段，又格式正确时才返回True
+        result = has_headers and header_format_correct
+
+        if has_headers and not header_format_correct:
+            logger.debug(f"邮件有头部字段但格式不正确，需要修复")
+        elif not has_headers:
+            logger.debug(f"邮件缺少头部字段")
+
+        return result
+
+    def _build_complete_email_content(
+        self, metadata: Dict[str, Any], original_content: str
+    ) -> str:
+        """
+        根据元数据构建完整的邮件内容
+
+        Args:
+            metadata: 邮件元数据
+            original_content: 原始邮件内容
+
+        Returns:
+            str: 完整的邮件内容
+        """
+        headers = []
+
+        # 添加基本头部 - 注意：不在头部字段之间添加空行
+        headers.append(f"Message-ID: {metadata.get('message_id', '')}")
+        headers.append(f"Subject: {metadata.get('subject', '')}")
+        headers.append(f"From: {metadata.get('from_addr', '')}")
+
+        # 处理收件人
+        to_addrs = metadata.get("to_addrs", [])
+        if isinstance(to_addrs, str):
+            try:
+                to_addrs = json.loads(to_addrs)
+            except:
+                to_addrs = [to_addrs]
+
+        if isinstance(to_addrs, list) and to_addrs:
+            if isinstance(to_addrs[0], dict):
+                to_list = [
+                    addr.get("address", "") for addr in to_addrs if addr.get("address")
+                ]
+            else:
+                to_list = [str(addr) for addr in to_addrs]
+            headers.append(f"To: {', '.join(to_list)}")
+
+        # 添加日期
+        date_str = metadata.get("date", "")
+        if date_str:
+            try:
+                date = datetime.datetime.fromisoformat(date_str)
+                date_formatted = date.strftime("%a, %d %b %Y %H:%M:%S %z")
+            except:
+                date_formatted = date_str
+        else:
+            date_formatted = datetime.datetime.now().strftime(
+                "%a, %d %b %Y %H:%M:%S %z"
+            )
+        headers.append(f"Date: {date_formatted}")
+
+        # 添加MIME头部
+        headers.append("MIME-Version: 1.0")
+
+        # 检查原始内容是否包含base64编码
+        import base64
+
+        if "base64" in original_content.lower() or self._looks_like_base64(
+            original_content
+        ):
+            headers.append("Content-Type: text/plain; charset=utf-8")
+            headers.append("Content-Transfer-Encoding: base64")
+            # 只在头部结束后添加一个空行（RFC标准）
+            headers.append("")  # 空行分隔头部和正文
+
+            # 提取并处理base64内容
+            base64_content = self._extract_base64_content(original_content)
+            if base64_content:
+                headers.append(base64_content)
+            else:
+                # 如果无法提取base64内容，将原内容编码为base64
+                encoded_content = base64.b64encode(
+                    original_content.encode("utf-8")
+                ).decode("ascii")
+                # 按76字符换行（RFC标准）
+                formatted_content = "\n".join(
+                    [
+                        encoded_content[i : i + 76]
+                        for i in range(0, len(encoded_content), 76)
+                    ]
+                )
+                headers.append(formatted_content)
+        else:
+            headers.append("Content-Type: text/plain; charset=utf-8")
+            headers.append("Content-Transfer-Encoding: 8bit")
+            # 只在头部结束后添加一个空行（RFC标准）
+            headers.append("")  # 空行分隔头部和正文
+            headers.append(original_content)
+
+        # 使用'\n'连接，确保符合RFC标准：头部字段连续，只在头部结束后有一个空行
+        return "\n".join(headers)
+
+    def _looks_like_base64(self, content: str) -> bool:
+        """
+        检查内容是否看起来像base64编码
+
+        Args:
+            content: 内容字符串
+
+        Returns:
+            bool: 如果看起来像base64编码返回True
+        """
+        lines = content.strip().split("\n")
+        base64_lines = 0
+
+        for line in lines:
+            line = line.strip()
+            if len(line) > 20:  # 忽略太短的行
+                try:
+                    import base64
+
+                    base64.b64decode(line)
+                    base64_lines += 1
+                except:
+                    pass
+
+        # 如果超过一半的行看起来像base64，则认为是base64编码
+        return base64_lines > len(lines) / 2
+
+    def _extract_base64_content(self, content: str) -> str:
+        """
+        从内容中提取base64编码的部分
+
+        Args:
+            content: 原始内容
+
+        Returns:
+            str: 提取的base64内容
+        """
+        lines = content.split("\n")
+        base64_lines = []
+
+        for line in lines:
+            line = line.strip()
+            if line and not line.startswith(
+                ("Content-", "MIME-", "Subject:", "From:", "To:", "Date:")
+            ):
+                try:
+                    import base64
+
+                    # 验证是否为有效的base64
+                    base64.b64decode(line)
+                    base64_lines.append(line)
+                except:
+                    continue
+
+        return "\n".join(base64_lines)
 
     def get_emails(
         self, folder: str = "inbox", limit: int = 100, offset: int = 0

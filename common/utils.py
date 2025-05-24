@@ -84,16 +84,32 @@ logger = setup_logging("email_app")
 
 def generate_message_id(domain: str = "localhost") -> str:
     """
-    生成唯一的邮件ID
+    生成符合RFC 5322标准的唯一邮件ID
+
+    根据RFC 5322和业界最佳实践：
+    - 使用UUID确保全局唯一性
+    - 包含时间戳提高可读性
+    - 使用标准的<unique-id@domain>格式
 
     Args:
-        domain: 域名部分
+        domain: 域名部分，默认为localhost
 
     Returns:
         格式为<uuid@domain>的邮件ID
     """
+    import time
+
+    # 使用UUID4确保全局唯一性
     unique_id = str(uuid.uuid4().hex)
-    return f"<{unique_id}@{domain}>"
+
+    # 可选：添加时间戳前缀提高可读性（用于调试）
+    timestamp = int(time.time())
+
+    # 生成符合RFC 5322标准的Message-ID
+    # 格式：<timestamp.uuid@domain>
+    message_id = f"<{timestamp}.{unique_id}@{domain}>"
+
+    return message_id
 
 
 def generate_timestamp() -> str:
