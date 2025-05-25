@@ -8,7 +8,7 @@ import json
 from typing import Dict, List, Optional, Set, Tuple, Any, Callable
 
 from common.utils import setup_logging
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import EmailService  # 使用新的数据库服务
 from server.pop3_auth import POP3Authenticator
 
 # 设置日志
@@ -20,7 +20,7 @@ class POP3CommandHandler:
 
     def __init__(
         self,
-        db_handler: DatabaseHandler,
+        email_service: EmailService,  # 改用EmailService
         authenticator: POP3Authenticator,
         send_response_callback: Callable[[str], None],
     ):
@@ -28,11 +28,11 @@ class POP3CommandHandler:
         初始化POP3命令处理器
 
         Args:
-            db_handler: 数据库处理器
+            email_service: 邮件服务
             authenticator: POP3认证器
             send_response_callback: 发送响应的回调函数
         """
-        self.db_handler = db_handler
+        self.email_service = email_service  # 使用邮件服务
         self.authenticator = authenticator
         self.send_response = send_response_callback
 
@@ -171,7 +171,7 @@ class POP3CommandHandler:
             # 预加载邮件列表
             try:
                 # 加载邮件列表 - 使用用户的邮箱地址而不是用户名
-                self.cached_emails = self.db_handler.list_emails(
+                self.cached_emails = self.email_service.list_emails(
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
@@ -209,7 +209,7 @@ class POP3CommandHandler:
         """调试邮件加载问题"""
         logger.warning(f"未找到邮件，尝试使用更宽松的查询进行调试")
         # 尝试直接从数据库查询所有邮件，用于调试
-        all_emails = self.db_handler.list_emails()
+        all_emails = self.email_service.list_emails()
         logger.info(f"数据库中共有 {len(all_emails)} 封邮件")
         if all_emails:
             # 记录一些邮件的收件人信息，用于调试
@@ -304,7 +304,7 @@ class POP3CommandHandler:
         if not self.cached_emails:
             try:
                 # 如果缓存为空，重新获取邮件列表 - 使用用户的邮箱地址而不是用户名
-                self.cached_emails = self.db_handler.list_emails(
+                self.cached_emails = self.email_service.list_emails(
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
@@ -342,7 +342,7 @@ class POP3CommandHandler:
         if not self.cached_emails:
             try:
                 # 如果缓存为空，重新获取邮件列表 - 使用用户的邮箱地址而不是用户名
-                self.cached_emails = self.db_handler.list_emails(
+                self.cached_emails = self.email_service.list_emails(
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
@@ -402,7 +402,7 @@ class POP3CommandHandler:
             if not self.cached_emails:
                 try:
                     # 如果缓存为空，重新获取邮件列表 - 使用用户的邮箱地址而不是用户名
-                    self.cached_emails = self.db_handler.list_emails(
+                    self.cached_emails = self.email_service.list_emails(
                         user_email=self.user_email,
                         include_deleted=False,
                         include_spam=False,
@@ -432,12 +432,12 @@ class POP3CommandHandler:
 
                 try:
                     # 获取邮件内容
-                    content = self.db_handler.get_email_content(message_id)
+                    content = self.email_service.get_email_content(message_id)
 
                     if content:
                         # 标记为已读
                         try:
-                            self.db_handler.mark_email_as_read(message_id)
+                            self.email_service.mark_email_as_read(message_id)
                             logger.debug(f"邮件已标记为已读: {message_id}")
                         except Exception as e:
                             logger.warning(f"标记邮件为已读时出错: {e}")
@@ -487,7 +487,7 @@ class POP3CommandHandler:
                         # 尝试从元数据构建基本邮件内容
                         try:
                             # 获取元数据，构建简单邮件头信息
-                            metadata = self.db_handler.get_email_metadata(message_id)
+                            metadata = self.email_service.get_email_metadata(message_id)
                             if metadata:
                                 # 从元数据中提取关键信息
                                 subject = metadata.get("subject", "(无主题)")
@@ -612,7 +612,7 @@ Content-Type: text/plain; charset="utf-8"
             if not self.cached_emails:
                 try:
                     # 如果缓存为空，重新获取邮件列表 - 使用用户的邮箱地址而不是用户名
-                    self.cached_emails = self.db_handler.list_emails(
+                    self.cached_emails = self.email_service.list_emails(
                         user_email=self.user_email,
                         include_deleted=False,
                         include_spam=False,
@@ -711,7 +711,7 @@ Content-Type: text/plain; charset="utf-8"
             n_lines = int(parts[1])
 
             # 获取邮件列表 - 使用用户的邮箱地址而不是用户名
-            emails = self.db_handler.list_emails(
+            emails = self.email_service.list_emails(
                 user_email=self.user_email,
                 include_deleted=False,
                 include_spam=False,
@@ -721,7 +721,7 @@ Content-Type: text/plain; charset="utf-8"
                 email = emails[msg_num - 1]
 
                 # 获取邮件内容
-                content = self.db_handler.get_email_content(email["message_id"])
+                content = self.email_service.get_email_content(email["message_id"])
 
                 if content:
                     # 确保内容格式正确，处理不同的换行符情况
@@ -797,7 +797,7 @@ Content-Type: text/plain; charset="utf-8"
         if not self.cached_emails:
             try:
                 # 如果缓存为空，重新获取邮件列表 - 使用用户的邮箱地址而不是用户名
-                self.cached_emails = self.db_handler.list_emails(
+                self.cached_emails = self.email_service.list_emails(
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
@@ -843,7 +843,7 @@ Content-Type: text/plain; charset="utf-8"
     def perform_deletions(self) -> None:
         """执行删除操作"""
         for message_id in self.marked_for_deletion:
-            self.db_handler.mark_email_as_deleted(message_id)
+            self.email_service.mark_email_as_deleted(message_id)
 
         logger.info(f"已删除{len(self.marked_for_deletion)}封邮件")
         self.marked_for_deletion.clear()

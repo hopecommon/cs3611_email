@@ -325,9 +325,21 @@ class EmailHeaderBuilder:
         if email_obj.message_id:
             msg["Message-ID"] = processor.format_message_id(email_obj.message_id)
 
-        # Subject
+        # Subject - 使用RFC 2047编码处理中文
         if email_obj.subject:
-            msg["Subject"] = processor.create_header(email_obj.subject)
+            try:
+                # 检查是否包含非ASCII字符
+                email_obj.subject.encode("ascii")
+                # 纯ASCII，直接设置
+                msg["Subject"] = email_obj.subject
+            except UnicodeEncodeError:
+                # 包含非ASCII字符，使用Base64编码
+                import base64
+
+                encoded_subject = base64.b64encode(
+                    email_obj.subject.encode("utf-8")
+                ).decode("ascii")
+                msg["Subject"] = f"=?utf-8?B?{encoded_subject}?="
 
         # From
         if email_obj.from_addr:

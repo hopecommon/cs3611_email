@@ -297,24 +297,40 @@ def main():
 
                 if emails:
                     print(f"\n已成功获取{len(emails)}封邮件")
+
+                    success_count = 0
+                    error_count = 0
+
                     for i, email in enumerate(emails, 1):
                         try:
                             print(f"\n邮件 {i}/{len(emails)}:")
                             print_email(email, args.verbose)
 
-                            # 保存邮件
+                            # 只保存邮件文件，不操作数据库（避免与POP3服务器冲突）
                             try:
                                 eml_path = pop3_client.save_email_as_eml(
                                     email, save_dir
                                 )
                                 print(f"邮件已保存为: {eml_path}")
+                                success_count += 1
+
                             except Exception as save_err:
                                 logger.error(f"保存邮件失败: {save_err}")
                                 print(f"保存邮件失败: {save_err}")
+                                error_count += 1
                         except Exception as e:
                             logger.error(f"处理邮件 {i} 时出错: {e}")
                             print(f"处理邮件 {i} 时出错: {e}")
+                            error_count += 1
                             continue
+
+                    # 显示最终统计信息
+                    print(f"\n处理完成!")
+                    print(f"成功保存: {success_count} 封邮件")
+                    if error_count > 0:
+                        print(f"保存失败: {error_count} 封邮件")
+
+                    print(f"\n💡 提示: 邮件已保存为文件，数据库记录由POP3服务器管理")
                 else:
                     print("没有邮件可获取或获取过程中出现错误")
             except Exception as e:

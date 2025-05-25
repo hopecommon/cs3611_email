@@ -38,13 +38,9 @@ class EmailContentManager:
             保存的文件路径，失败返回None
         """
         try:
-            # 从邮件内容中提取Message-ID（如果可能）
-            extracted_id = self._extract_message_id(content)
-            if extracted_id:
-                logger.debug(f"从邮件内容中提取到Message-ID: {extracted_id}")
-                message_id = extracted_id
+            # 使用统一的格式处理器确保邮件格式正确
+            formatted_content = EmailFormatHandler.ensure_proper_format(content)
 
-            # 生成安全的文件名
             safe_filename = self._generate_safe_filename(message_id)
             filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_filename}.eml")
 
@@ -53,12 +49,13 @@ class EmailContentManager:
                 logger.info(f"邮件文件已存在，跳过保存: {filepath}")
                 return filepath
 
-            # 保存内容
+            # 保存格式化后的内容
             with open(filepath, "w", encoding="utf-8") as f:
-                f.write(content)
+                f.write(formatted_content)
 
             logger.info(f"已保存邮件内容: {filepath}")
             return filepath
+
         except Exception as e:
             logger.error(f"保存邮件内容时出错: {e}")
             return None
@@ -77,31 +74,34 @@ class EmailContentManager:
             邮件内容，失败返回None
         """
         try:
-            # 尝试使用多种方式查找邮件文件
+            # 1. 尝试直接加载内容
             content = self._try_load_content(message_id, metadata)
+            if not content:
+                logger.warning(f"无法找到邮件内容: {message_id}")
+                return None
 
-            if content:
-                # 使用统一的格式处理器确保邮件格式正确
-                content = EmailFormatHandler.ensure_proper_format(content, metadata)
+            # 2. 使用统一的格式验证和修复
+            if EmailFormatHandler.validate_email_format(content):
                 return content
 
-            # 如果找不到内容，生成占位内容
+            # 3. 如果格式有问题，尝试修复
+            logger.debug(f"邮件格式需要修复: {message_id}")
             if metadata:
-                return self._generate_placeholder_content(message_id, metadata)
+                fixed_content = self._build_complete_email_content(metadata, content)
+                return EmailFormatHandler.ensure_proper_format(fixed_content)
+            else:
+                return EmailFormatHandler.ensure_proper_format(content)
 
-            logger.error(f"未找到邮件内容: {message_id}")
-            return None
         except Exception as e:
             logger.error(f"获取邮件内容时出错: {e}")
             return None
 
     def _extract_message_id(self, content: str) -> Optional[str]:
-        """从邮件内容中提取Message-ID"""
+        """从邮件内容中提取Message-ID，使用统一的EmailFormatHandler"""
         try:
-            import email
-
-            msg = email.message_from_string(content)
-            return msg.get("Message-ID")
+            # 使用统一的邮件格式处理器解析
+            email_obj = EmailFormatHandler.parse_email_content(content)
+            return email_obj.message_id
         except Exception:
             return None
 

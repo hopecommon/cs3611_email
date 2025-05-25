@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common.utils import setup_logging
 from common.models import Email, EmailAddress, Attachment, EmailStatus
 from client.mime_handler import MIMEHandler
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 
 # 设置测试日志
 logger = setup_logging("test_storage")

@@ -75,37 +75,38 @@ class EmailFormatHandler:
             Email对象
         """
         try:
-            # 预处理原始内容以提高兼容性
-            processed_content = EmailPreprocessor.preprocess_content(raw_content)
+            # 首先尝试使用Python标准库直接解析
+            import email
 
-            # 使用增强的解析策略
-            msg = EmailParsingStrategies.parse_with_strategies(processed_content)
+            if isinstance(raw_content, bytes):
+                raw_content = raw_content.decode("utf-8", errors="ignore")
+
+            msg = email.message_from_string(raw_content)
+
+            # 验证基本头部是否存在
+            if not msg.get("From"):
+                logger.warning("邮件缺少From头部，尝试备用解析")
+                raise ValueError("Missing From header")
 
             # 解析基本信息
             message_id = EmailHeaderProcessor.extract_message_id(msg)
 
-            # 增强的主题解析
+            # 解析主题
             subject = EmailHeaderProcessor.decode_header_value(msg.get("Subject", ""))
-            if not subject:
-                # 尝试从其他可能的头部获取主题
-                subject = msg.get("Subject", "") or ""
 
-            # 增强的发件人解析
+            # 解析发件人
             from_addr = EmailHeaderProcessor.parse_address(msg.get("From", ""))
             if not from_addr:
-                # 尝试从其他头部获取发件人信息
-                sender = msg.get("Sender", "") or msg.get("Reply-To", "")
-                if sender:
-                    from_addr = EmailHeaderProcessor.parse_address(sender)
+                from common.models import EmailAddress
 
-                if not from_addr:
-                    from common.models import EmailAddress
+                from_addr = EmailAddress("", "unknown@localhost")
 
-                    from_addr = EmailAddress("", "unknown@localhost")
-
+            # 解析收件人
             to_addrs = EmailHeaderProcessor.parse_address_list(msg.get("To", ""))
             cc_addrs = EmailHeaderProcessor.parse_address_list(msg.get("Cc", ""))
             bcc_addrs = EmailHeaderProcessor.parse_address_list(msg.get("Bcc", ""))
+
+            # 解析日期
             date = EmailHeaderProcessor.parse_date(msg.get("Date", ""))
 
             # 解析内容
@@ -127,17 +128,31 @@ class EmailFormatHandler:
                 attachments=attachments,
             )
 
-            logger.debug(f"已解析邮件: {message_id}")
+            logger.debug(
+                f"已解析邮件: {message_id}, From: {from_addr}, Subject: {subject}"
+            )
             return email_obj
 
         except Exception as e:
-            logger.error(f"解析MIME消息失败: {e}")
+            logger.error(f"标准解析失败: {e}")
             # 尝试使用备用解析方法
             try:
+                # 预处理原始内容以提高兼容性
+                processed_content = EmailPreprocessor.preprocess_content(raw_content)
+                # 使用增强的解析策略
+                msg = EmailParsingStrategies.parse_with_strategies(processed_content)
+
+                # 如果备用解析也获取不到From，直接使用原始内容创建基本对象
+                if not msg.get("From"):
+                    logger.warning("备用解析也无法获取From字段，使用原始解析")
+                    return cls._create_basic_email_from_raw(raw_content)
+
+                # 继续正常解析流程...
                 return EmailFallbackParser.fallback_parse(raw_content)
             except Exception as fallback_e:
                 logger.error(f"备用解析也失败: {fallback_e}")
-                raise e
+                # 最后的回退：创建基本邮件对象
+                return cls._create_basic_email_from_raw(raw_content)
 
     @classmethod
     def format_email_for_storage(cls, email_obj: Email) -> str:
@@ -264,3 +279,111 @@ class EmailFormatHandler:
     def _preprocess_raw_content(cls, raw_content):
         """向后兼容方法"""
         return EmailPreprocessor.preprocess_content(raw_content)
+
+    @classmethod
+    def _create_basic_email_from_raw(cls, raw_content: str) -> Email:
+        """
+        从原始内容创建基本的Email对象，用于解析失败时的回退
+
+        Args:
+            raw_content: 原始邮件内容
+
+        Returns:
+            基本的Email对象
+        """
+        try:
+            import re
+            from common.models import Email, EmailAddress
+
+            # 尝试从原始内容中提取基本信息
+            lines = raw_content.split("\n")
+
+            # 提取基本头部信息
+            message_id = ""
+            subject = ""
+            from_addr = None
+            to_addrs = []
+            date = None
+
+            for line in lines:
+                line = line.strip()
+                if line.startswith("Message-ID:"):
+                    message_id = line[11:].strip()
+                elif line.startswith("Subject:"):
+                    subject = line[8:].strip()
+                    # 解码RFC 2047
+                    subject = EmailHeaderProcessor.decode_header_value(subject)
+                elif line.startswith("From:"):
+                    from_str = line[5:].strip()
+                    from_addr = EmailHeaderProcessor.parse_address(from_str)
+                elif line.startswith("To:"):
+                    to_str = line[3:].strip()
+                    to_addrs = EmailHeaderProcessor.parse_address_list(to_str)
+                elif line.startswith("Date:"):
+                    date_str = line[5:].strip()
+                    date = EmailHeaderProcessor.parse_date(date_str)
+                elif line == "":
+                    # 头部结束
+                    break
+
+            # 如果仍然没有from_addr，创建默认值
+            if not from_addr:
+                from_addr = EmailAddress("", "unknown@localhost")
+
+            # 尝试提取文本内容
+            text_content = ""
+            try:
+                # 查找Base64编码的内容
+                import base64
+
+                for line in lines:
+                    line = line.strip()
+                    if line and re.match(r"^[A-Za-z0-9+/=]+$", line) and len(line) > 4:
+                        try:
+                            decoded = base64.b64decode(line).decode(
+                                "utf-8", errors="ignore"
+                            )
+                            if decoded.strip() and len(decoded) > 1:
+                                text_content = decoded.strip()
+                                break
+                        except:
+                            continue
+            except Exception as e:
+                logger.debug(f"提取文本内容失败: {e}")
+
+            # 创建Email对象
+            email_obj = Email(
+                message_id=message_id or "unknown@localhost",
+                subject=subject,
+                from_addr=from_addr,
+                to_addrs=to_addrs,
+                cc_addrs=[],
+                bcc_addrs=[],
+                date=date,
+                text_content=text_content,
+                html_content="",
+                attachments=[],
+            )
+
+            logger.info(
+                f"创建基本邮件对象: {message_id}, From: {from_addr}, Subject: {subject}"
+            )
+            return email_obj
+
+        except Exception as e:
+            logger.error(f"创建基本邮件对象失败: {e}")
+            # 最后的回退：创建最小邮件对象
+            from common.models import Email, EmailAddress
+
+            return Email(
+                message_id="unknown@localhost",
+                subject="解析失败的邮件",
+                from_addr=EmailAddress("", "unknown@localhost"),
+                to_addrs=[],
+                cc_addrs=[],
+                bcc_addrs=[],
+                date=None,
+                text_content="邮件解析失败",
+                html_content="",
+                attachments=[],
+            )

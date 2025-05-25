@@ -47,25 +47,42 @@ class DatabaseConnection:
         """
         start_time = time.time()
         last_error: Optional[Exception] = None
+        retry_count = 0
+        max_retries = 10  # 增加重试次数
 
-        while time.time() - start_time < timeout:
+        while time.time() - start_time < timeout and retry_count < max_retries:
             try:
-                # 设置超时和忙等待重试
-                conn = sqlite3.connect(self.db_path, timeout=5.0)
+                # 设置更短的单次连接超时，但允许更多重试
+                conn = sqlite3.connect(self.db_path, timeout=2.0)
+
                 # 启用外键约束
                 conn.execute("PRAGMA foreign_keys = ON")
+
+                # 设置WAL模式以提高并发性能
+                conn.execute("PRAGMA journal_mode = WAL")
+
+                # 设置更短的忙等待超时
+                conn.execute("PRAGMA busy_timeout = 2000")  # 2秒
+
                 return conn
             except sqlite3.OperationalError as e:
                 last_error = e
+                retry_count += 1
+
                 # 如果是"database is locked"错误，等待一段时间后重试
-                if "database is locked" in str(e):
-                    time.sleep(0.5)
+                if "database is locked" in str(e) or "database is busy" in str(e):
+                    wait_time = min(0.1 * (2**retry_count), 1.0)  # 指数退避，最大1秒
+                    logger.debug(
+                        f"数据库忙碌，等待 {wait_time:.2f} 秒后重试 (第 {retry_count} 次)"
+                    )
+                    time.sleep(wait_time)
                 else:
                     # 其他操作错误直接抛出
                     raise
 
         # 如果超时，抛出最后一个错误
         if last_error:
+            logger.error(f"数据库连接失败，已重试 {retry_count} 次: {last_error}")
             raise last_error
         else:
             raise sqlite3.OperationalError("数据库连接超时")
@@ -188,7 +205,7 @@ class DatabaseConnection:
 
     def execute_insert(self, table: str, data: dict) -> bool:
         """
-        执行插入操作
+        执行插入操作，带有强化的重试机制
 
         Args:
             table: 表名
@@ -197,31 +214,61 @@ class DatabaseConnection:
         Returns:
             bool: 操作是否成功
         """
-        try:
-            columns = ", ".join(data.keys())
-            placeholders = ", ".join(["?" for _ in data])
-            query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
+        max_retries = 10  # 增加重试次数
+        for attempt in range(max_retries):
+            try:
+                columns = ", ".join(data.keys())
+                placeholders = ", ".join(["?" for _ in data])
+                query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
 
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, tuple(data.values()))
-            conn.commit()
-            conn.close()
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(query, tuple(data.values()))
+                conn.commit()
+                conn.close()
 
-            return True
-        except sqlite3.IntegrityError:
-            # 主键冲突等完整性错误
-            logger.warning(f"插入数据时发生完整性错误: {table}")
-            return False
-        except Exception as e:
-            logger.error(f"插入数据时出错: {e}")
-            raise
+                if attempt > 0:
+                    logger.info(f"插入操作在第 {attempt + 1} 次尝试后成功: {table}")
+
+                return True
+            except sqlite3.IntegrityError as e:
+                # 主键冲突等完整性错误，不需要重试
+                if "UNIQUE constraint failed" in str(e) or "PRIMARY KEY" in str(e):
+                    logger.debug(
+                        f"插入数据时发生完整性错误（主键重复）: {table} - {str(e)}"
+                    )
+                    return False
+                else:
+                    logger.warning(f"插入数据时发生完整性错误: {table} - {str(e)}")
+                    return False
+            except sqlite3.OperationalError as e:
+                if (
+                    "database is locked" in str(e) or "database is busy" in str(e)
+                ) and attempt < max_retries - 1:
+                    # 使用指数退避，但限制最大等待时间为2秒
+                    wait_time = min(0.1 * (2**attempt), 2.0)
+                    if attempt == 0:
+                        logger.debug(f"插入操作数据库忙碌，开始重试机制: {table}")
+                    logger.debug(
+                        f"等待 {wait_time:.2f} 秒后进行第 {attempt + 2} 次尝试"
+                    )
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"插入数据时出错: {e}")
+                    raise
+            except Exception as e:
+                logger.error(f"插入数据时出错: {e}")
+                raise
+
+        logger.error(f"插入操作在 {max_retries} 次尝试后仍然失败: {table}")
+        return False
 
     def execute_update(
         self, table: str, data: dict, where_clause: str, where_params: tuple = ()
     ) -> bool:
         """
-        执行更新操作
+        执行更新操作，带有重试机制
 
         Args:
             table: 表名
@@ -232,22 +279,37 @@ class DatabaseConnection:
         Returns:
             bool: 操作是否成功
         """
-        try:
-            set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
-            query = f"UPDATE {table} SET {set_clause} WHERE {where_clause}"
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                set_clause = ", ".join([f"{key} = ?" for key in data.keys()])
+                query = f"UPDATE {table} SET {set_clause} WHERE {where_clause}"
 
-            params = tuple(data.values()) + where_params
+                params = tuple(data.values()) + where_params
 
-            conn = self.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            conn.commit()
-            conn.close()
+                conn = self.get_connection()
+                cursor = conn.cursor()
+                cursor.execute(query, params)
+                conn.commit()
+                conn.close()
 
-            return True
-        except Exception as e:
-            logger.error(f"更新数据时出错: {e}")
-            raise
+                return True
+            except sqlite3.OperationalError as e:
+                if (
+                    "database is locked" in str(e) or "database is busy" in str(e)
+                ) and attempt < max_retries - 1:
+                    wait_time = 0.1 * (2**attempt)
+                    logger.debug(f"更新操作数据库忙碌，等待 {wait_time:.2f} 秒后重试")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"更新数据时出错: {e}")
+                    raise
+            except Exception as e:
+                logger.error(f"更新数据时出错: {e}")
+                raise
+
+        return False
 
     def execute_delete(
         self, table: str, where_clause: str, where_params: tuple = ()

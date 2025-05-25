@@ -254,14 +254,10 @@ class POP3ClientRefactored:
             filename = f"{message_id}.eml"
             file_path = os.path.join(directory, filename)
 
-            # 使用SMTP客户端的MIME创建方法来生成标准的.eml内容
-            from client.smtp_client import SMTPClient
+            # 使用EmailFormatHandler创建标准的.eml内容，避免创建数据库连接
+            from common.email_format_handler import EmailFormatHandler
 
-            smtp_client = SMTPClient()
-            mime_msg = smtp_client._create_mime_message(email)
-
-            # 将MIME消息转换为字符串
-            eml_content = mime_msg.as_string()
+            eml_content = EmailFormatHandler.format_email_for_storage(email)
 
             # 写入文件，使用UTF-8编码
             with open(file_path, "w", encoding="utf-8", newline="\n") as f:

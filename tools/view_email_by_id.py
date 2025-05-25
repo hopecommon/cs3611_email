@@ -18,7 +18,8 @@ from email.header import decode_header
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging, safe_print
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 from tools.view_email import (
     decode_str,
     decode_header_str,

@@ -11,7 +11,8 @@ from typing import List, Dict, Any, Optional
 
 from common.utils import setup_logging
 from common.config import DB_PATH
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 
 # 设置日志
 logger = setup_logging("email_db")

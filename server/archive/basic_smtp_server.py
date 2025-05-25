@@ -22,7 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging
 from common.config import AUTH_REQUIRED, EMAIL_STORAGE_DIR
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 from server.user_auth import UserAuth
 
 # 设置日志

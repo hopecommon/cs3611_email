@@ -25,7 +25,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from server.pop3_server import StablePOP3Server
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 from server.user_auth import UserAuth
 from common.utils import setup_logging, generate_message_id
 from common.models import Email, EmailAddress, EmailStatus

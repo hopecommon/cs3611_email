@@ -437,7 +437,8 @@ python examples/list_emails.py
 
 ```python
 import argparse
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 
 # 解析命令行参数
 parser = argparse.ArgumentParser(description="搜索邮件")

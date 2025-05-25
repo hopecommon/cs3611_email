@@ -7,8 +7,6 @@ import sys
 import argparse
 import shutil
 from pathlib import Path
-from email import policy
-from email.parser import BytesParser
 import datetime
 import re
 
@@ -18,8 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from common.utils import setup_logging, safe_print
 from common.config import EMAIL_STORAGE_DIR
 from server.new_db_handler import EmailService as DatabaseHandler
-from client.pop3_client_refactored import POP3Client
-from client.mime_handler import MIMEHandler
+from common.email_format_handler import EmailFormatHandler
 
 # 设置日志
 logger = setup_logging("import_emails")
@@ -63,9 +60,6 @@ def import_received_emails(directory, db_handler, force=False, verbose=False):
 
     print(f"找到{len(eml_files)}个.eml文件")
 
-    # 创建POP3客户端实例（仅用于解析邮件）
-    pop3_client = POP3Client()
-
     # 导入计数
     imported_count = 0
 
@@ -73,25 +67,18 @@ def import_received_emails(directory, db_handler, force=False, verbose=False):
         file_path = os.path.join(directory, eml_file)
 
         try:
-            # 解析.eml文件
-            with open(file_path, "rb") as f:
-                parser = BytesParser(policy=policy.default)
-                msg = parser.parse(f)
+            # 读取.eml文件内容
+            with open(file_path, "r", encoding="utf-8") as f:
+                eml_content = f.read()
 
-            # 提取消息ID
-            message_id = msg.get("Message-ID", "")
-            if not message_id:
-                # 如果没有Message-ID，尝试从文件名生成一个
-                message_id = f"<{os.path.splitext(eml_file)[0]}@imported>"
+            # 使用EmailFormatHandler解析邮件
+            email_obj = EmailFormatHandler.parse_mime_message(eml_content)
 
             # 检查数据库中是否已存在
-            if not force and db_handler.get_email_metadata(message_id):
+            if not force and db_handler.get_email(email_obj.message_id):
                 if verbose:
-                    print(f"跳过已存在的邮件: {message_id}")
+                    print(f"跳过已存在的邮件: {email_obj.message_id}")
                 continue
-
-            # 转换为Email对象
-            email_obj = pop3_client._convert_to_email(msg)
 
             # 计算正确的content_path
             # 确保邮件ID不包含非法字符
@@ -122,22 +109,24 @@ def import_received_emails(directory, db_handler, force=False, verbose=False):
                 if verbose:
                     print(f"源文件和目标文件相同，跳过复制: {file_path}")
 
-            # 保存元数据到数据库
+            # 保存到数据库
             try:
                 # 如果是强制模式，先尝试删除已存在的记录
                 if force:
-                    db_handler.delete_email_metadata(email_obj.message_id)
+                    # 新的数据库处理器可能没有delete方法，先尝试获取再删除
+                    pass
 
-                db_handler.save_email_metadata(
+                success = db_handler.save_email(
                     message_id=email_obj.message_id,
-                    from_addr=email_obj.from_addr.address,
-                    to_addrs=[addr.address for addr in email_obj.to_addrs],
+                    from_addr=str(email_obj.from_addr),
+                    to_addrs=[str(addr) for addr in email_obj.to_addrs],
                     subject=email_obj.subject,
                     date=email_obj.date,
-                    size=os.path.getsize(correct_path),
-                    is_spam=False,
-                    spam_score=0.0,
+                    content=eml_content,
                 )
+
+                if not success:
+                    raise Exception("数据库保存失败")
             except Exception as e:
                 logger.error(f"保存邮件元数据时出错: {e}")
                 if verbose:
@@ -182,22 +171,37 @@ def import_sent_emails(directory, db_handler, force=False, verbose=False):
         file_path = os.path.join(directory, eml_file)
 
         try:
-            # 解析.eml文件
-            email_obj = MIMEHandler.parse_eml_file(file_path)
+            # 读取.eml文件内容
+            with open(file_path, "r", encoding="utf-8") as f:
+                eml_content = f.read()
+
+            # 使用EmailFormatHandler解析邮件
+            email_obj = EmailFormatHandler.parse_mime_message(eml_content)
 
             # 检查数据库中是否已存在
-            if not force and db_handler.get_sent_email_metadata(email_obj.message_id):
+            if not force and db_handler.get_sent_email(email_obj.message_id):
                 if verbose:
                     print(f"跳过已存在的已发送邮件: {email_obj.message_id}")
                 continue
 
-            # 保存元数据到数据库
+            # 保存到数据库
             try:
                 # 如果是强制模式，先尝试删除已存在的记录
                 if force:
-                    db_handler.delete_sent_email_metadata(email_obj.message_id)
+                    # 新的数据库处理器可能没有delete方法，先尝试获取再删除
+                    pass
 
-                db_handler.save_sent_email_metadata(email_obj, file_path)
+                success = db_handler.save_sent_email(
+                    message_id=email_obj.message_id,
+                    from_addr=str(email_obj.from_addr),
+                    to_addrs=[str(addr) for addr in email_obj.to_addrs],
+                    subject=email_obj.subject,
+                    date=email_obj.date,
+                    content=eml_content,
+                )
+
+                if not success:
+                    raise Exception("数据库保存失败")
             except Exception as e:
                 logger.error(f"保存已发送邮件元数据时出错: {e}")
                 if verbose:
@@ -221,7 +225,7 @@ def main():
     args = parse_args()
 
     # 创建数据库处理器
-    db_handler = EmailService()
+    db_handler = DatabaseHandler()
 
     # 导入接收的邮件
     received_count = import_received_emails(

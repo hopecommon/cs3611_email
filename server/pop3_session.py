@@ -12,7 +12,7 @@ from typing import Tuple, Optional
 
 from common.utils import setup_logging
 from common.config import CONNECTION_IDLE_TIMEOUT
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import EmailService  # 使用新的数据库服务
 from server.pop3_auth import POP3Authenticator
 from server.pop3_commands import POP3CommandHandler
 
@@ -27,7 +27,7 @@ class POP3Session:
         self,
         client_socket: socket.socket,
         client_address: Tuple[str, int],
-        db_handler: DatabaseHandler,
+        email_service: EmailService,  # 改用EmailService
         authenticator: POP3Authenticator,
     ):
         """
@@ -36,12 +36,12 @@ class POP3Session:
         Args:
             client_socket: 客户端套接字
             client_address: 客户端地址
-            db_handler: 数据库处理器
+            email_service: 邮件服务
             authenticator: POP3认证器
         """
         self.socket = client_socket
         self.address = client_address
-        self.db_handler = db_handler
+        self.email_service = email_service  # 使用邮件服务
         self.authenticator = authenticator
 
         # 设置更长的超时时间，确保会话不会过早结束
@@ -49,7 +49,7 @@ class POP3Session:
 
         # 创建命令处理器
         self.command_handler = POP3CommandHandler(
-            db_handler=self.db_handler,
+            email_service=self.email_service,  # 传递邮件服务
             authenticator=self.authenticator,
             send_response_callback=self.send_response,
         )

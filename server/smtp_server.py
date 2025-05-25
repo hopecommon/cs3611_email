@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 稳定的SMTP服务器 - 专门解决连接稳定性问题
+统一使用EmailFormatHandler处理邮件格式
 """
 
 import os
@@ -8,15 +9,10 @@ import sys
 import ssl
 import time
 import uuid
-import email
-import email.utils
 import datetime
 import asyncio
 import socket
 from pathlib import Path
-from email.parser import Parser
-from email import policy
-from email.header import decode_header
 from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import SMTP as SMTPServer, LoginPassword
 from aiosmtpd.smtp import AuthResult
@@ -24,7 +20,7 @@ from aiosmtpd.smtp import AuthResult
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from common.utils import setup_logging
+from common.utils import setup_logging, generate_message_id
 from common.config import (
     SSL_CERT_FILE,
     SSL_KEY_FILE,
@@ -33,6 +29,7 @@ from common.config import (
     CONNECTION_TIMEOUT,
 )
 from common.port_config import resolve_port
+from common.email_format_handler import EmailFormatHandler
 from server.new_db_handler import EmailService
 from server.user_auth import UserAuth
 
@@ -41,7 +38,7 @@ logger = setup_logging("stable_smtp_server")
 
 
 class StableSMTPHandler:
-    """稳定的SMTP处理器"""
+    """稳定的SMTP处理器 - 统一使用EmailFormatHandler"""
 
     def __init__(self, db_handler: EmailService, server_instance):
         self.db_handler = db_handler
@@ -83,59 +80,38 @@ class StableSMTPHandler:
             return "451 Requested action aborted: error in processing"
 
     def _process_email(self, mail_from, rcpt_tos, email_content):
-        """处理邮件存储"""
+        """处理邮件存储 - 使用统一的EmailFormatHandler"""
         try:
-            # 解析邮件
-            email_message = Parser(policy=policy.default).parsestr(email_content)
+            # 使用统一的邮件格式处理器解析邮件
+            email_obj = EmailFormatHandler.parse_email_content(email_content)
 
-            # 提取或生成Message-ID（符合RFC 5322标准）
-            message_id = email_message.get("Message-ID")
-            if not message_id:
-                # 使用标准的Message-ID生成函数
-                from common.utils import generate_message_id
+            # 检查和修复Message-ID
+            if not email_obj.message_id or email_obj.message_id == "unknown@localhost":
+                # 生成新的Message-ID
+                new_message_id = generate_message_id("smtp.localhost")
+                email_obj.message_id = new_message_id
 
-                message_id = generate_message_id("smtp.localhost")
-                # 在邮件内容开头添加Message-ID头部
-                email_content = f"Message-ID: {message_id}\r\n{email_content}"
-                logger.info(f"SMTP服务器自动添加Message-ID: {message_id}")
-
-            # 提取主题
-            subject = email_message.get("Subject", "")
-            if subject:
-                try:
-                    decoded_subject = decode_header(subject)
-                    if decoded_subject[0][1]:
-                        subject = decoded_subject[0][0].decode(decoded_subject[0][1])
-                    elif isinstance(decoded_subject[0][0], bytes):
-                        subject = decoded_subject[0][0].decode(
-                            "utf-8", errors="replace"
-                        )
-                except Exception:
-                    pass
-
-            # 提取日期
-            try:
-                date = email.utils.parsedate_to_datetime(email_message.get("Date"))
-            except (TypeError, ValueError):
-                date = datetime.datetime.now()
+                # 重新格式化邮件内容以包含新的Message-ID
+                email_content = EmailFormatHandler.format_email_for_storage(email_obj)
+                logger.info(f"SMTP服务器自动添加Message-ID: {new_message_id}")
 
             # 使用新的EmailService统一接口保存邮件
             success = self.db_handler.save_email(
-                message_id=message_id,
+                message_id=email_obj.message_id,
                 from_addr=mail_from,
                 to_addrs=rcpt_tos,
-                subject=subject,
+                subject=email_obj.subject,
                 content=email_content,
-                date=date,
+                date=email_obj.date or datetime.datetime.now(),
                 is_spam=False,
                 spam_score=0.0,
             )
 
             if not success:
-                logger.error(f"邮件保存失败: {message_id}")
+                logger.error(f"邮件保存失败: {email_obj.message_id}")
                 raise Exception("邮件保存失败")
 
-            logger.debug(f"邮件已保存: {message_id}")
+            logger.debug(f"邮件已保存: {email_obj.message_id}")
 
         except Exception as e:
             logger.error(f"处理邮件存储时出错: {e}")

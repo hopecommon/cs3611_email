@@ -28,7 +28,7 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
     """稳定的POP3处理器"""
 
     def __init__(self, request, client_address, server):
-        self.db_handler = server.db_handler
+        self.email_service = server.email_service  # 改用email_service
         self.user_auth = server.user_auth
         self.authenticated_user = None
         self.use_ssl = server.use_ssl
@@ -166,7 +166,7 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
         # 重新查询并缓存
         try:
             logger.debug(f"get_user_emails: 从数据库查询邮件")
-            emails = self.db_handler.list_emails(
+            emails = self.email_service.list_emails(
                 user_email=user_email, include_deleted=False, include_spam=False
             )
             self.cached_emails = emails
@@ -286,7 +286,7 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
 
             if 1 <= msg_num <= len(emails):
                 email = emails[msg_num - 1]
-                content = self.db_handler.get_email_content(email["message_id"])
+                content = self.email_service.get_email_content(email["message_id"])
                 if content:
                     # 计算内容大小（字节）
                     content_bytes = content.encode("utf-8")
@@ -343,7 +343,7 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
             if 1 <= msg_num <= len(emails):
                 email = emails[msg_num - 1]
                 # 实际标记邮件为删除
-                success = self.db_handler.mark_email_as_deleted(email["message_id"])
+                success = self.email_service.mark_email_as_deleted(email["message_id"])
                 if success:
                     # 清除缓存，因为邮件状态已改变
                     self.invalidate_cache()
@@ -391,27 +391,24 @@ class StablePOP3Server:
     ):
         self.host = host
         self.port = port
+        self.use_ssl = use_ssl
         self.ssl_cert_file = ssl_cert_file
         self.ssl_key_file = ssl_key_file
         self.max_connections = max_connections
+        self.server = None
+        self.ssl_context = None
 
-        # 初始化数据库和认证
-        self.db_handler = EmailService()
+        # 创建数据库服务和用户认证
+        self.email_service = EmailService()  # 使用新的邮件服务
         self.user_auth = UserAuth()
 
-        # 创建SSL上下文
-        self.ssl_context = None
-        self.use_ssl = use_ssl  # 设置初始SSL状态
-
-        if use_ssl:
+        # 如果使用SSL，创建SSL上下文
+        if self.use_ssl:
             self.ssl_context = self._create_ssl_context()
-            if self.ssl_context is None:
-                # SSL上下文创建失败，禁用SSL
-                self.use_ssl = False
-                logger.warning("SSL上下文创建失败，已自动禁用SSL功能")
+
+        logger.info(f"POP3服务器已初始化: {host}:{port} (SSL: {use_ssl})")
 
         # 服务器实例
-        self.server = None
         self.server_thread = None
 
         ssl_status = "启用" if self.use_ssl else "禁用"
@@ -616,12 +613,12 @@ class StablePOP3Server:
                     self,
                     server_address,
                     RequestHandlerClass,
-                    db_handler,
+                    email_service,  # 改用email_service
                     user_auth,
                     use_ssl,
                     ssl_context,
                 ):
-                    self.db_handler = db_handler
+                    self.email_service = email_service  # 改用email_service
                     self.user_auth = user_auth
                     self.use_ssl = use_ssl
                     self.ssl_context = ssl_context
@@ -630,7 +627,7 @@ class StablePOP3Server:
             self.server = ThreadedTCPServer(
                 (self.host, self.port),
                 StablePOP3Handler,
-                self.db_handler,
+                self.email_service,  # 传递email_service
                 self.user_auth,
                 self.use_ssl,
                 self.ssl_context,

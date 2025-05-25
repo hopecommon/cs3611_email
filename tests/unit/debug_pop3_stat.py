@@ -12,7 +12,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from server.user_auth import UserAuth
-from server.db_handler import DatabaseHandler
+from server.new_db_handler import DatabaseHandler
+
 from common.utils import setup_logging
 
 # 设置日志
