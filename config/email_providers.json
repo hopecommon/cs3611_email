@@ -1,0 +1,186 @@
+{
+  "providers": {
+    "qq": {
+      "name": "QQ邮箱",
+      "domains": ["qq.com"],
+      "smtp": {
+        "host": "smtp.qq.com",
+        "port": 587,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "pop.qq.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "imap.qq.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "需要开启SMTP/POP3/IMAP服务，使用授权码而非密码"
+    },
+    "gmail": {
+      "name": "Gmail",
+      "domains": ["gmail.com", "googlemail.com"],
+      "smtp": {
+        "host": "smtp.gmail.com",
+        "port": 587,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "pop.gmail.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "imap.gmail.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "需要开启两步验证并使用应用专用密码"
+    },
+    "163": {
+      "name": "163邮箱",
+      "domains": ["163.com"],
+      "smtp": {
+        "host": "smtp.163.com",
+        "port": 25,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "pop.163.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "imap.163.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "需要开启SMTP/POP3/IMAP服务，使用授权码"
+    },
+    "126": {
+      "name": "126邮箱",
+      "domains": ["126.com"],
+      "smtp": {
+        "host": "smtp.126.com",
+        "port": 25,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "pop.126.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "imap.126.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "需要开启SMTP/POP3/IMAP服务，使用授权码"
+    },
+    "outlook": {
+      "name": "Outlook/Hotmail",
+      "domains": ["outlook.com", "hotmail.com", "live.com", "msn.com"],
+      "smtp": {
+        "host": "smtp-mail.outlook.com",
+        "port": 587,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "outlook.office365.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "outlook.office365.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "支持OAuth2认证，建议使用应用密码"
+    },
+    "yahoo": {
+      "name": "Yahoo邮箱",
+      "domains": ["yahoo.com", "yahoo.cn"],
+      "smtp": {
+        "host": "smtp.mail.yahoo.com",
+        "port": 587,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "LOGIN"
+      },
+      "pop3": {
+        "host": "pop.mail.yahoo.com",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "imap.mail.yahoo.com",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "需要生成应用密码"
+    },
+    "custom": {
+      "name": "自定义服务器",
+      "domains": [],
+      "smtp": {
+        "host": "",
+        "port": 587,
+        "ssl_port": 465,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "pop3": {
+        "host": "",
+        "port": 110,
+        "ssl_port": 995,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "imap": {
+        "host": "",
+        "port": 143,
+        "ssl_port": 993,
+        "use_ssl": true,
+        "auth_method": "AUTO"
+      },
+      "notes": "手动配置服务器设置"
+    }
+  }
+}

@@ -196,3 +196,5 @@ received_emails/
 tests_backup/
 examples_backup/
 migration_backups/
+received_attachments/
+test_attachments/

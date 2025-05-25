@@ -27,15 +27,18 @@ class ViewEmailMenu:
         """显示查看邮件菜单"""
         while True:
             self.main_cli.clear_screen()
-            print("\n===== 查看邮件 =====")
-            print("1. 收件箱")
-            print("2. 已发送")
-            print("3. 查看邮件详情")
-            print("4. 删除邮件")
-            print("5. 标记为已读/未读")
-            print("0. 返回主菜单")
+            print("\n" + "=" * 60)
+            print("📋 查看邮件")
+            print("=" * 60)
+            print("1. 📥 收件箱")
+            print("2. 📤 已发送")
+            print("3. 📖 查看邮件详情")
+            print("4. 🗑️  删除邮件")
+            print("5. 👁️  标记为已读/未读")
+            print("0. 🔙 返回主菜单")
+            print("-" * 60)
 
-            choice = input("\n请选择操作 [0-5]: ")
+            choice = input("\n请选择操作 [0-5]: ").strip()
 
             if choice == "1":
                 self.main_cli.set_current_folder("inbox")
@@ -45,29 +48,33 @@ class ViewEmailMenu:
                 self._list_emails()
             elif choice == "3":
                 if not self.main_cli.get_email_list():
-                    input("邮件列表为空，请先获取邮件，按回车键继续...")
+                    input("❌ 邮件列表为空，请先获取邮件，按回车键继续...")
                     continue
                 self._view_email_details()
             elif choice == "4":
                 if not self.main_cli.get_email_list():
-                    input("邮件列表为空，请先获取邮件，按回车键继续...")
+                    input("❌ 邮件列表为空，请先获取邮件，按回车键继续...")
                     continue
                 self._delete_email()
             elif choice == "5":
                 if not self.main_cli.get_email_list():
-                    input("邮件列表为空，请先获取邮件，按回车键继续...")
+                    input("❌ 邮件列表为空，请先获取邮件，按回车键继续...")
                     continue
                 self._toggle_read_status()
             elif choice == "0":
                 return
             else:
-                input("无效选择，请按回车键继续...")
+                input("❌ 无效选择，请按回车键继续...")
 
     def _list_emails(self):
         """列出邮件"""
         self.main_cli.clear_screen()
-        folder = "已发送" if self.main_cli.get_current_folder() == "sent" else "收件箱"
-        print(f"\n===== {folder} =====")
+        folder = (
+            "📤 已发送" if self.main_cli.get_current_folder() == "sent" else "📥 收件箱"
+        )
+        print(f"\n" + "=" * 60)
+        print(f"{folder}")
+        print("=" * 60)
 
         # 从数据库获取邮件列表
         try:
@@ -78,7 +85,7 @@ class ViewEmailMenu:
                 emails = db.list_emails()
 
             if not emails:
-                print(f"{folder}中没有邮件")
+                print(f"📭 {folder}中没有邮件")
                 input("\n按回车键继续...")
                 return
 
@@ -86,6 +93,8 @@ class ViewEmailMenu:
             self.main_cli.set_email_list(emails)
 
             # 显示邮件列表
+            print(f"\n📊 共找到 {len(emails)} 封邮件")
+            print("-" * 60)
             print(f"{'ID':<5} {'状态':<4} {'日期':<20} {'发件人':<30} {'主题':<40}")
             print("-" * 100)
 
@@ -93,7 +102,7 @@ class ViewEmailMenu:
             from common.email_header_processor import EmailHeaderProcessor
 
             for i, email in enumerate(emails):
-                status = "已读" if email.get("is_read") else "未读"
+                status = "✅已读" if email.get("is_read") else "📬未读"
                 date = email.get("date", "")
                 sender = email.get("from_addr", email.get("sender", ""))
                 subject = email.get("subject", "")
@@ -108,11 +117,12 @@ class ViewEmailMenu:
                 sender = sender[:28] + ".." if len(sender) > 30 else sender
                 subject = subject[:38] + ".." if len(subject) > 40 else subject
 
-                print(f"{i+1:<5} {status:<4} {date:<20} {sender:<30} {subject:<40}")
+                print(f"{i+1:<5} {status:<6} {date:<20} {sender:<30} {subject:<40}")
 
             # 选择邮件
+            print("-" * 100)
             while True:
-                choice = input("\n请输入要查看的邮件ID (或按回车返回): ")
+                choice = input("\n📧 请输入要查看的邮件ID (或按回车返回): ").strip()
                 if not choice:
                     return
 
@@ -123,24 +133,26 @@ class ViewEmailMenu:
                         self._view_email_details()
                         break
                     else:
-                        print("无效的ID")
+                        print("❌ 无效的ID")
                 except ValueError:
-                    print("请输入有效的数字")
+                    print("❌ 请输入有效的数字")
         except Exception as e:
             logger.error(f"获取邮件列表时出错: {e}")
-            print(f"获取邮件列表时出错: {e}")
+            print(f"❌ 获取邮件列表时出错: {e}")
             input("\n按回车键继续...")
 
     def _view_email_details(self):
         """查看邮件详情"""
         current_email = self.main_cli.get_current_email()
         if not current_email:
-            print("未选择邮件")
+            print("❌ 未选择邮件")
             input("\n按回车键继续...")
             return
 
         self.main_cli.clear_screen()
-        print("\n===== 邮件详情 =====")
+        print("\n" + "=" * 60)
+        print("📖 邮件详情")
+        print("=" * 60)
 
         # 获取并解析邮件内容以获取完整信息
         try:
@@ -181,13 +193,37 @@ class ViewEmailMenu:
                         else current_email.get("date", "(未知日期)")
                     )
 
-                    print(f"主题: {subject}")
-                    print(f"发件人: {from_addr}")
-                    print(f"收件人: {to_addrs}")
-                    print(f"日期: {date}")
+                    print(f"📋 主题: {subject}")
+                    print(f"📤 发件人: {from_addr}")
+                    print(f"📧 收件人: {to_addrs}")
+                    print(f"📅 日期: {date}")
+
+                    # 显示附件信息
+                    if parsed_email.attachments:
+                        print(f"\n📎 附件信息 ({len(parsed_email.attachments)} 个):")
+                        print("-" * 60)
+                        for i, attachment in enumerate(parsed_email.attachments, 1):
+                            size_mb = (
+                                attachment.size / (1024 * 1024)
+                                if attachment.size > 1024 * 1024
+                                else attachment.size / 1024
+                            )
+                            size_unit = "MB" if attachment.size > 1024 * 1024 else "KB"
+                            print(f"  {i}. 📄 {attachment.filename}")
+                            print(f"     📊 类型: {attachment.content_type}")
+                            print(f"     📏 大小: {size_mb:.2f} {size_unit}")
+
+                        # 询问是否保存附件
+                        save_choice = (
+                            input(f"\n💾 是否保存附件? (Y/n): ").strip().lower()
+                        )
+                        if save_choice not in ["n", "no"]:
+                            self._save_attachments(parsed_email.attachments)
 
                     # 显示邮件正文
-                    print("\n----- 邮件正文 -----")
+                    print("\n" + "-" * 60)
+                    print("📝 邮件正文")
+                    print("-" * 60)
                     if parsed_email.text_content:
                         content = parsed_email.text_content.strip()
                         if len(content) > 2000:
@@ -228,20 +264,56 @@ class ViewEmailMenu:
             if not current_email.get("is_read"):
                 db = self.main_cli.get_db()
                 db.update_email(current_email.get("message_id"), is_read=True)
-                print("\n邮件已标记为已读")
+                print("\n📬 邮件已标记为已读")
         except Exception as e:
             logger.error(f"标记邮件为已读时出错: {e}")
 
         input("\n按回车键继续...")
 
+    def _save_attachments(self, attachments):
+        """保存附件"""
+        try:
+            # 创建附件保存目录
+            attachments_dir = Path("attachments")
+            attachments_dir.mkdir(exist_ok=True)
+
+            print(f"\n💾 正在保存附件到 '{attachments_dir}' 目录...")
+
+            from client.mime_handler import MIMEHandler
+
+            saved_count = 0
+            for i, attachment in enumerate(attachments, 1):
+                try:
+                    saved_path = MIMEHandler.decode_attachment(
+                        attachment, str(attachments_dir)
+                    )
+                    print(f"  ✅ 附件 {i}: {attachment.filename} -> {saved_path}")
+                    saved_count += 1
+                except Exception as e:
+                    print(f"  ❌ 附件 {i}: {attachment.filename} 保存失败 - {e}")
+
+            print(f"\n🎉 成功保存 {saved_count}/{len(attachments)} 个附件")
+
+        except Exception as e:
+            logger.error(f"保存附件时出错: {e}")
+            print(f"❌ 保存附件时出错: {e}")
+
     def _delete_email(self):
         """删除邮件"""
-        print("\n删除邮件功能暂未实现")
+        print("\n🗑️  删除邮件功能正在开发中...")
+        print("💡 计划功能:")
+        print("   • 软删除（标记为已删除）")
+        print("   • 硬删除（从服务器删除）")
+        print("   • 批量删除")
         input("按回车键继续...")
 
     def _toggle_read_status(self):
         """切换邮件已读/未读状态"""
-        print("\n切换邮件状态功能暂未实现")
+        print("\n👁️  切换邮件状态功能正在开发中...")
+        print("💡 计划功能:")
+        print("   • 标记为已读/未读")
+        print("   • 批量状态更改")
+        print("   • 重要邮件标记")
         input("按回车键继续...")
 
     def _display_basic_email_info(self, email_data):
@@ -265,34 +337,45 @@ class ViewEmailMenu:
         if isinstance(to_addrs, list):
             to_addrs = ", ".join([str(addr) for addr in to_addrs])
 
-        print(f"主题: {subject}")
-        print(f"发件人: {from_addr}")
-        print(f"收件人: {to_addrs}")
-        print(f"日期: {email_data.get('date', '(未知日期)')}")
-        print("\n邮件内容: (无法获取)")
+        print(f"📋 主题: {subject}")
+        print(f"📤 发件人: {from_addr}")
+        print(f"📧 收件人: {to_addrs}")
+        print(f"📅 日期: {email_data.get('date', '(未知日期)')}")
+        print("\n📝 邮件内容: (无法获取)")
 
     def _display_fallback_email_info(self, email_data, content_str):
         """回退显示方法，当EmailFormatHandler解析失败时使用"""
         # 显示基本信息
         self._display_basic_email_info(email_data)
 
-        # 尝试简单的内容提取
-        print("\n----- 邮件正文 -----")
-        readable_content = self._extract_readable_content(content_str)
+        # 尝试简单的内容提取和附件检测
+        print("\n" + "-" * 60)
+        print("📝 邮件正文")
+        print("-" * 60)
+        readable_content, attachments_info = (
+            self._extract_readable_content_and_attachments(content_str)
+        )
+
         if len(readable_content) > 2000:
             print(readable_content[:2000] + "\n...(内容过长，已截断)")
         else:
             print(readable_content)
 
-    def _extract_readable_content(self, content_str: str) -> str:
+        # 显示检测到的附件信息
+        if attachments_info:
+            print(f"\n📎 检测到附件:")
+            for i, att_info in enumerate(attachments_info, 1):
+                print(f"  {i}. {att_info}")
+
+    def _extract_readable_content_and_attachments(self, content_str: str):
         """
-        从MIME内容中提取可读的文本内容
+        从MIME内容中提取可读的文本内容和附件信息
 
         Args:
             content_str: 原始MIME内容字符串
 
         Returns:
-            可读的文本内容
+            (可读的文本内容, 附件信息列表)
         """
         try:
             import email
@@ -304,6 +387,7 @@ class ViewEmailMenu:
 
             # 提取文本内容
             text_content = []
+            attachments_info = []
 
             if msg.is_multipart():
                 # 多部分消息，遍历所有部分
@@ -313,6 +397,26 @@ class ViewEmailMenu:
                         continue
 
                     content_type = part.get_content_type()
+                    content_disposition = part.get_content_disposition()
+
+                    # 检查是否是附件
+                    if content_disposition == "attachment" or (
+                        content_disposition and "attachment" in content_disposition
+                    ):
+                        filename = part.get_filename() or "未知文件"
+                        try:
+                            payload = part.get_payload(decode=True)
+                            size = len(payload) if payload else 0
+                            size_str = (
+                                f"{size/1024:.1f}KB" if size > 1024 else f"{size}B"
+                            )
+                            attachments_info.append(
+                                f"📄 {filename} ({content_type}, {size_str})"
+                            )
+                        except:
+                            attachments_info.append(f"📄 {filename} ({content_type})")
+                        continue
+
                     if content_type == "text/plain":
                         # 获取文本内容
                         payload = part.get_payload(decode=True)
@@ -352,7 +456,21 @@ class ViewEmailMenu:
             else:
                 # 单部分消息
                 content_type = msg.get_content_type()
-                if content_type.startswith("text/"):
+                content_disposition = msg.get_content_disposition()
+
+                # 检查是否是附件
+                if content_disposition == "attachment":
+                    filename = msg.get_filename() or "未知文件"
+                    try:
+                        payload = msg.get_payload(decode=True)
+                        size = len(payload) if payload else 0
+                        size_str = f"{size/1024:.1f}KB" if size > 1024 else f"{size}B"
+                        attachments_info.append(
+                            f"📄 {filename} ({content_type}, {size_str})"
+                        )
+                    except:
+                        attachments_info.append(f"📄 {filename} ({content_type})")
+                elif content_type.startswith("text/"):
                     payload = msg.get_payload(decode=True)
                     if payload:
                         try:
@@ -387,13 +505,16 @@ class ViewEmailMenu:
                         except:
                             continue
 
-            # 返回合并的文本内容
+            # 返回合并的文本内容和附件信息
             if text_content:
                 result = "\n\n".join(text_content).strip()
-                return result if result else "邮件内容为空"
+                return (result if result else "邮件内容为空", attachments_info)
             else:
-                return f"无法解析邮件内容，原始内容摘要:\n{content_str[:300]}..."
+                return (
+                    f"无法解析邮件内容，原始内容摘要:\n{content_str[:300]}...",
+                    attachments_info,
+                )
 
         except Exception as e:
             logger.error(f"提取可读内容失败: {e}")
-            return f"内容解析失败: {e}\n\n原始内容:\n{content_str[:300]}..."
+            return (f"内容解析失败: {e}\n\n原始内容:\n{content_str[:300]}...", [])

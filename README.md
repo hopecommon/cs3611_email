@@ -21,12 +21,39 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 环境要求
+- Python 3.8 或更高版本
+- pip 包管理器
+
+### 安装依赖
 ```bash
+# 手动安装
 pip install -r requirements.txt
 ```
 
-### 2. 启动服务器
+### 初始化环境
+```bash
+python init_project.py
+```
+
+### 🎯 推荐方式：使用统一CLI界面
+
+**最简单的使用方式是运行统一的命令行界面：**
+
+```bash
+python cli.py
+```
+
+这将启动一个交互式菜单，提供完整的邮件客户端功能：
+- 📧 发送邮件（支持附件、HTML格式）
+- 📥 接收邮件（POP3/IMAP支持）
+- 🔍 搜索和查看邮件
+- ⚙️ 账户和服务器配置管理
+- 🔒 SSL/TLS安全连接
+
+## 🛠️ 高级用户与开发者选项（可选）
+
+### 启动服务器
 ```bash
 # 启动SMTP和POP3服务器
 python examples/example_run_both_servers.py
@@ -36,7 +63,7 @@ python server/smtp_server.py --port 465
 python server/pop3_server.py --port 995
 ```
 
-### 3. 发送邮件
+### 发送邮件
 ```bash
 python examples/send_auth_email.py \
   --host localhost --port 465 --ssl \
@@ -45,7 +72,7 @@ python examples/send_auth_email.py \
   --subject "测试邮件" --content "邮件内容"
 ```
 
-### 4. 接收邮件
+### 接收邮件
 ```bash
 python -m client.pop3_cli \
   --host localhost --port 995 \

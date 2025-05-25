@@ -31,30 +31,46 @@ class SendEmailMenu:
         """显示发送邮件菜单"""
         while True:
             self.main_cli.clear_screen()
-            print("\n===== 发送邮件 =====")
-            print("1. 创建新邮件")
-            print("2. 回复邮件")
-            print("3. 转发邮件")
-            print("0. 返回主菜单")
+            print("\n" + "=" * 60)
+            print("📤 发送邮件")
+            print("=" * 60)
 
-            choice = input("\n请选择操作 [0-3]: ")
+            # 显示当前账户信息
+            current_account = self.main_cli.get_current_account_info()
+            if current_account:
+                print(
+                    f"📧 当前发件账户: {current_account['display_name']} ({current_account['email']})"
+                )
+            else:
+                print("❌ 未配置发件账户")
+                input("请先在账户设置中配置邮箱账户，按回车键返回...")
+                return
+
+            print("\n" + "-" * 60)
+            print("1. 📝 创建新邮件")
+            print("2. 💬 回复邮件")
+            print("3. 📨 转发邮件")
+            print("0. 🔙 返回主菜单")
+            print("-" * 60)
+
+            choice = input("\n请选择操作 [0-3]: ").strip()
 
             if choice == "1":
                 self._create_and_send_email()
             elif choice == "2":
                 if not self.main_cli.get_current_email():
-                    input("请先选择一封邮件，按回车键继续...")
+                    input("❌ 请先选择一封邮件，按回车键继续...")
                     continue
                 self._reply_email()
             elif choice == "3":
                 if not self.main_cli.get_current_email():
-                    input("请先选择一封邮件，按回车键继续...")
+                    input("❌ 请先选择一封邮件，按回车键继续...")
                     continue
                 self._forward_email()
             elif choice == "0":
                 return
             else:
-                input("无效选择，请按回车键继续...")
+                input("❌ 无效选择，请按回车键继续...")
 
     def _init_smtp_client(self):
         """初始化SMTP客户端"""
@@ -62,47 +78,73 @@ class SendEmailMenu:
             return True
 
         try:
-            # 使用本地服务器配置
-            print("\n请输入SMTP服务器信息:")
-            host = input("服务器地址 (默认: localhost): ") or "localhost"
-            port = input("端口 (默认: 465): ") or "465"
-            username = input("用户名 (默认: testuser): ") or "testuser"
-            
-            import getpass
-            password = getpass.getpass("密码 (默认: testpass): ") or "testpass"
-            
-            use_ssl = input("使用SSL? (y/n, 默认: y): ").lower() != "n"
+            # 获取当前账户的SMTP配置
+            smtp_config = self.main_cli.get_smtp_config()
+            if not smtp_config:
+                print("❌ 未找到SMTP配置，请先在账户设置中配置邮箱账户")
+                return False
+
+            print(f"🔄 正在连接到 {smtp_config['host']}:{smtp_config['port']}...")
 
             # 创建SMTP客户端
             self.smtp_client = SMTPClient(
-                host=host,
-                port=int(port),
-                use_ssl=use_ssl,
-                username=username,
-                password=password,
-                auth_method="AUTO"
+                host=smtp_config["host"],
+                port=smtp_config["port"],
+                use_ssl=smtp_config.get("use_ssl", True),
+                username=smtp_config["username"],
+                password=smtp_config["password"],
+                auth_method=smtp_config.get("auth_method", "AUTO"),
             )
-            
-            logger.info(f"SMTP客户端已初始化: {host}:{port} (SSL: {use_ssl})")
+
+            logger.info(
+                f"SMTP客户端已初始化: {smtp_config['host']}:{smtp_config['port']}"
+            )
+            print(f"✅ 已连接到邮件服务器")
             return True
 
         except Exception as e:
             logger.error(f"初始化SMTP客户端失败: {e}")
-            print(f"初始化SMTP客户端失败: {e}")
+            print(f"❌ 连接邮件服务器失败: {e}")
+            print("💡 请检查网络连接和账户配置")
             return False
 
     def _create_and_send_email(self):
         """创建并发送新邮件"""
         self.main_cli.clear_screen()
-        print("\n===== 创建新邮件 =====")
+        print("\n" + "=" * 60)
+        print("📝 创建新邮件")
+        print("=" * 60)
+
+        # 获取当前账户信息
+        current_account = self.main_cli.get_current_account_info()
+        if not current_account:
+            print("❌ 未配置发件账户")
+            input("按回车键返回...")
+            return
+
+        # 显示发件人信息
+        print(
+            f"📤 发件人: {current_account['display_name']} <{current_account['email']}>"
+        )
+        print("-" * 60)
 
         # 获取邮件信息
-        subject = input("主题: ")
-        to_addrs = input("收件人 (多个收件人用逗号分隔): ")
-        cc_addrs = input("抄送 (可选，多个收件人用逗号分隔): ")
-        bcc_addrs = input("密送 (可选，多个收件人用逗号分隔): ")
+        subject = input("📋 主题: ").strip()
+        if not subject:
+            print("❌ 主题不能为空")
+            input("按回车键继续...")
+            return
 
-        print("\n请输入邮件正文 (输入单独一行的 '.' 结束):")
+        to_addrs = input("📧 收件人 (多个收件人用逗号分隔): ").strip()
+        if not to_addrs:
+            print("❌ 收件人不能为空")
+            input("按回车键继续...")
+            return
+
+        cc_addrs = input("📄 抄送 (可选，多个收件人用逗号分隔): ").strip()
+        bcc_addrs = input("🔒 密送 (可选，多个收件人用逗号分隔): ").strip()
+
+        print(f"\n📝 请输入邮件正文 (输入单独一行的 '.' 结束):")
         lines = []
         while True:
             line = input()
@@ -114,13 +156,16 @@ class SendEmailMenu:
         # 询问是否添加附件
         attachments = []
         while True:
-            add_attachment = input("\n是否添加附件? (y/n): ").lower()
+            add_attachment = input(f"\n📎 是否添加附件? (y/n): ").lower()
             if add_attachment != "y":
                 break
 
-            filepath = input("请输入附件路径: ")
+            filepath = input("📁 请输入附件路径: ").strip()
+            if not filepath:
+                continue
+
             if not os.path.exists(filepath):
-                print(f"文件不存在: {filepath}")
+                print(f"❌ 文件不存在: {filepath}")
                 continue
 
             try:
@@ -134,9 +179,9 @@ class SendEmailMenu:
                     filename=filename, content_type=content_type, content=content
                 )
                 attachments.append(attachment)
-                print(f"已添加附件: {filename}")
+                print(f"✅ 已添加附件: {filename}")
             except Exception as e:
-                print(f"添加附件失败: {e}")
+                print(f"❌ 添加附件失败: {e}")
 
         # 创建邮件对象
         try:
@@ -164,9 +209,12 @@ class SendEmailMenu:
 
             # 创建邮件
             email = Email(
-                message_id=f"<{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{id(self)}@localhost>",
+                message_id=f"<{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.{id(self)}@{current_account['email'].split('@')[1]}>",
                 subject=subject,
-                from_addr=EmailAddress(name="", address=self.smtp_client.username),
+                from_addr=EmailAddress(
+                    name=current_account["display_name"],
+                    address=current_account["email"],
+                ),
                 to_addrs=to_addr_list,
                 cc_addrs=cc_addr_list,
                 bcc_addrs=bcc_addr_list,
@@ -176,45 +224,104 @@ class SendEmailMenu:
                 status=EmailStatus.DRAFT,
             )
 
+            # 显示邮件摘要
+            print(f"\n📋 邮件摘要:")
+            print(
+                f"   📤 发件人: {current_account['display_name']} <{current_account['email']}>"
+            )
+            print(f"   📧 收件人: {to_addrs}")
+            if cc_addrs:
+                print(f"   📄 抄送: {cc_addrs}")
+            if bcc_addrs:
+                print(f"   🔒 密送: {bcc_addrs}")
+            print(f"   📋 主题: {subject}")
+            if attachments:
+                print(f"   📎 附件: {len(attachments)} 个")
+
+            # 确认发送
+            confirm = input(f"\n❓ 确认发送邮件? (Y/n): ").strip().lower()
+            if confirm in ["n", "no"]:
+                print("❌ 邮件发送已取消")
+                input("按回车键继续...")
+                return
+
             # 发送邮件
-            print("\n正在发送邮件...")
+            print(f"\n🚀 正在发送邮件...")
             result = self.smtp_client.send_email(email)
 
             if result:
-                print("邮件发送成功！")
+                print("✅ 邮件发送成功！")
+
+                # 保存到已发送文件夹（如果有数据库支持）
+                try:
+                    email.status = EmailStatus.SENT
+                    # 这里可以添加保存到数据库的逻辑
+                    logger.info(f"邮件发送成功: {subject}")
+                except Exception as e:
+                    logger.warning(f"保存已发送邮件失败: {e}")
             else:
-                print("邮件发送失败！")
+                print("❌ 邮件发送失败！")
+                print("💡 请检查网络连接和账户配置")
+
         except Exception as e:
             logger.error(f"发送邮件时出错: {e}")
-            print(f"发送邮件时出错: {e}")
+            print(f"❌ 发送邮件时出错: {e}")
 
         input("\n按回车键继续...")
 
     def _reply_email(self):
         """回复邮件"""
-        print("\n回复邮件功能暂未实现")
-        input("按回车键继续...")
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("💬 回复邮件")
+        print("=" * 60)
+        print("⚠️  回复邮件功能正在开发中...")
+        print("💡 您可以使用 '创建新邮件' 功能手动回复")
+        input("\n按回车键继续...")
 
     def _forward_email(self):
         """转发邮件"""
-        print("\n转发邮件功能暂未实现")
-        input("按回车键继续...")
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("📨 转发邮件")
+        print("=" * 60)
+        print("⚠️  转发邮件功能正在开发中...")
+        print("💡 您可以使用 '创建新邮件' 功能手动转发")
+        input("\n按回车键继续...")
 
     def _parse_email_address(self, addr_str: str) -> EmailAddress:
-        """解析邮件地址字符串为EmailAddress对象"""
-        # 简单解析，格式可以是 "名称 <地址>" 或 "地址"
-        if "<" in addr_str and ">" in addr_str:
-            name = addr_str.split("<")[0].strip()
-            address = addr_str.split("<")[1].split(">")[0].strip()
-        else:
-            name = ""
-            address = addr_str.strip()
+        """解析邮件地址字符串"""
+        try:
+            if "<" in addr_str and ">" in addr_str:
+                # 格式: "Name <email@domain.com>"
+                name = addr_str.split("<")[0].strip().strip('"')
+                address = addr_str.split("<")[1].split(">")[0].strip()
+            else:
+                # 格式: "email@domain.com"
+                name = ""
+                address = addr_str.strip()
 
-        return EmailAddress(name=name, address=address)
+            return EmailAddress(name=name, address=address)
+        except Exception as e:
+            logger.error(f"解析邮件地址失败: {addr_str}, 错误: {e}")
+            # 返回原始地址作为fallback
+            return EmailAddress(name="", address=addr_str.strip())
 
     def _guess_content_type(self, filename: str) -> str:
         """根据文件名猜测内容类型"""
-        import mimetypes
-
-        content_type, _ = mimetypes.guess_type(filename)
-        return content_type or "application/octet-stream"
+        ext = os.path.splitext(filename)[1].lower()
+        content_types = {
+            ".txt": "text/plain",
+            ".pdf": "application/pdf",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".xls": "application/vnd.ms-excel",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".gif": "image/gif",
+            ".zip": "application/zip",
+            ".rar": "application/x-rar-compressed",
+        }
+        return content_types.get(ext, "application/octet-stream")

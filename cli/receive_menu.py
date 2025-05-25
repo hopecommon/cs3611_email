@@ -30,15 +30,31 @@ class ReceiveEmailMenu:
         """显示接收邮件菜单"""
         while True:
             self.main_cli.clear_screen()
-            print("\n===== 接收邮件 =====")
-            print("1. 接收所有邮件")
-            print("2. 接收最新邮件")
-            print("3. 接收未读邮件")
-            print("4. 导入现有邮件文件")
-            print("5. 设置过滤条件")
-            print("0. 返回主菜单")
+            print("\n" + "=" * 60)
+            print("📥 接收邮件")
+            print("=" * 60)
 
-            choice = input("\n请选择操作 [0-5]: ")
+            # 显示当前账户信息
+            current_account = self.main_cli.get_current_account_info()
+            if current_account:
+                print(
+                    f"📧 当前收件账户: {current_account['display_name']} ({current_account['email']})"
+                )
+            else:
+                print("❌ 未配置收件账户")
+                input("请先在账户设置中配置邮箱账户，按回车键返回...")
+                return
+
+            print("\n" + "-" * 60)
+            print("1. 📬 接收所有邮件")
+            print("2. 📮 接收最新邮件")
+            print("3. 📭 接收未读邮件")
+            print("4. 📁 导入现有邮件文件")
+            print("5. 🔍 设置过滤条件")
+            print("0. 🔙 返回主菜单")
+            print("-" * 60)
+
+            choice = input("\n请选择操作 [0-5]: ").strip()
 
             if choice == "1":
                 self._receive_all_emails()
@@ -53,7 +69,7 @@ class ReceiveEmailMenu:
             elif choice == "0":
                 return
             else:
-                input("无效选择，请按回车键继续...")
+                input("❌ 无效选择，请按回车键继续...")
 
     def _init_pop3_client(self):
         """初始化POP3客户端"""
@@ -61,33 +77,33 @@ class ReceiveEmailMenu:
             return True
 
         try:
-            # 使用本地服务器配置
-            print("\n请输入POP3服务器信息:")
-            host = input("服务器地址 (默认: localhost): ") or "localhost"
-            port = input("端口 (默认: 995): ") or "995"
-            username = input("用户名 (默认: testuser): ") or "testuser"
+            # 获取当前账户的POP3配置
+            pop3_config = self.main_cli.get_pop3_config()
+            if not pop3_config:
+                print("❌ 未找到POP3配置，请先在账户设置中配置邮箱账户")
+                return False
 
-            import getpass
+            print(f"🔄 正在连接到 {pop3_config['host']}:{pop3_config['port']}...")
 
-            password = getpass.getpass("密码 (默认: testpass): ") or "testpass"
-
-            use_ssl = input("使用SSL? (y/n, 默认: y): ").lower() != "n"
-
-            # 创建POP3客户端（包含认证信息）
+            # 创建POP3客户端
             self.pop3_client = POP3ClientRefactored(
-                host=host,
-                port=int(port),
-                use_ssl=use_ssl,
-                username=username,
-                password=password,
+                host=pop3_config["host"],
+                port=pop3_config["port"],
+                use_ssl=pop3_config.get("use_ssl", True),
+                username=pop3_config["username"],
+                password=pop3_config["password"],
             )
 
-            logger.info(f"POP3客户端已初始化: {host}:{port} (SSL: {use_ssl})")
+            logger.info(
+                f"POP3客户端已初始化: {pop3_config['host']}:{pop3_config['port']}"
+            )
+            print(f"✅ 已连接到邮件服务器")
             return True
 
         except Exception as e:
             logger.error(f"初始化POP3客户端失败: {e}")
-            print(f"初始化POP3客户端失败: {e}")
+            print(f"❌ 连接邮件服务器失败: {e}")
+            print("💡 请检查网络连接和账户配置")
             return False
 
     def _receive_all_emails(self):
@@ -97,7 +113,7 @@ class ReceiveEmailMenu:
                 input("\n按回车键继续...")
                 return
 
-            print("\n正在连接到邮箱...")
+            print(f"\n🔄 正在连接到邮箱...")
 
             # 使用上下文管理器确保连接正确关闭
             with self.pop3_client as client:
@@ -106,18 +122,32 @@ class ReceiveEmailMenu:
                 # 获取邮件列表
                 email_list = client.list_emails()
                 if not email_list:
-                    print("邮箱中没有邮件")
+                    print("📭 邮箱中没有邮件")
                     input("\n按回车键继续...")
                     return
 
-                print(f"邮箱中有 {len(email_list)} 封邮件")
+                print(f"📊 邮箱中有 {len(email_list)} 封邮件")
+
+                # 确认是否继续
+                if len(email_list) > 10:
+                    confirm = (
+                        input(
+                            f"⚠️  邮件数量较多({len(email_list)}封)，确认接收所有邮件? (Y/n): "
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if confirm in ["n", "no"]:
+                        print("❌ 操作已取消")
+                        input("按回车键继续...")
+                        return
 
                 # 获取所有邮件
-                print("正在获取邮件...")
+                print("🚀 正在获取邮件...")
                 emails = client.retrieve_all_emails()
 
                 if emails:
-                    print(f"成功获取了 {len(emails)} 封邮件")
+                    print(f"✅ 成功获取了 {len(emails)} 封邮件")
 
                     # 保存邮件
                     saved_count = 0
@@ -126,8 +156,12 @@ class ReceiveEmailMenu:
                     # 获取数据库服务
                     db = self.main_cli.get_db()
 
-                    for email in emails:
+                    for i, email in enumerate(emails, 1):
                         try:
+                            print(
+                                f"📧 处理邮件 {i}/{len(emails)}: {email.subject or '(无主题)'}"
+                            )
+
                             # 确保目录存在
                             inbox_dir = os.path.join(EMAIL_STORAGE_DIR, "inbox")
                             os.makedirs(inbox_dir, exist_ok=True)
@@ -136,7 +170,6 @@ class ReceiveEmailMenu:
                             filepath = client.save_email_as_eml(email, inbox_dir)
                             if filepath:
                                 saved_count += 1
-                                print(f"已保存邮件: {os.path.basename(filepath)}")
 
                                 # 保存到数据库
                                 try:
@@ -167,26 +200,23 @@ class ReceiveEmailMenu:
 
                                     if success:
                                         db_saved_count += 1
-                                        print(f"已保存到数据库: {email.message_id}")
-                                    else:
-                                        print(f"保存到数据库失败: {email.message_id}")
 
                                 except Exception as db_err:
                                     logger.error(f"保存邮件到数据库失败: {db_err}")
-                                    print(f"保存到数据库失败: {db_err}")
 
                         except Exception as e:
                             logger.error(f"保存邮件失败: {e}")
-                            print(f"保存邮件失败: {e}")
+                            print(f"❌ 保存邮件失败: {e}")
 
-                    print(f"\n成功保存了 {saved_count} 封邮件到: {inbox_dir}")
-                    print(f"成功保存了 {db_saved_count} 封邮件到数据库")
+                    print(f"\n🎉 接收完成!")
+                    print(f"✅ 成功保存了 {saved_count} 封邮件到: {inbox_dir}")
+                    print(f"✅ 成功保存了 {db_saved_count} 封邮件到数据库")
                 else:
-                    print("未获取到任何邮件")
+                    print("❌ 未获取到任何邮件")
 
         except Exception as e:
             logger.error(f"接收邮件时出错: {e}")
-            print(f"接收邮件时出错: {e}")
+            print(f"❌ 接收邮件时出错: {e}")
 
         input("\n按回车键继续...")
 
@@ -199,187 +229,227 @@ class ReceiveEmailMenu:
 
             # 获取要接收的邮件数量
             try:
-                num = int(input("\n请输入要接收的最新邮件数量: "))
-                if num <= 0:
-                    print("数量必须大于0")
-                    input("\n按回车键继续...")
+                count = int(input("📊 请输入要接收的最新邮件数量 (默认: 5): ") or "5")
+                if count <= 0:
+                    print("❌ 邮件数量必须大于0")
+                    input("按回车键继续...")
                     return
             except ValueError:
-                print("请输入有效的数字")
-                input("\n按回车键继续...")
+                print("❌ 请输入有效的数字")
+                input("按回车键继续...")
                 return
 
-            print("\n正在连接到邮箱...")
+            print(f"\n🔄 正在连接到邮箱...")
 
-            # 使用上下文管理器
             with self.pop3_client as client:
-                # 连接时会自动进行认证
-
                 # 获取邮件列表
                 email_list = client.list_emails()
                 if not email_list:
-                    print("邮箱中没有邮件")
+                    print("📭 邮箱中没有邮件")
                     input("\n按回车键继续...")
                     return
 
-                # 获取最新的N封邮件
-                total_emails = len(email_list)
-                actual_num = min(num, total_emails)
+                print(f"📊 邮箱中有 {len(email_list)} 封邮件")
 
-                print(f"正在获取最新的 {actual_num} 封邮件...")
-                emails = client.retrieve_all_emails(limit=actual_num)
+                # 计算实际要获取的邮件数量
+                actual_count = min(count, len(email_list))
+                print(f"🚀 正在获取最新 {actual_count} 封邮件...")
 
-                if emails:
-                    print(f"成功获取了 {len(emails)} 封邮件")
+                # 获取最新的邮件（从列表末尾开始）
+                latest_emails = []
+                for i in range(len(email_list) - actual_count, len(email_list)):
+                    email_info = email_list[i]
+                    email = client.retrieve_email(
+                        email_info[0]
+                    )  # email_info[0] 是邮件ID
+                    if email:
+                        latest_emails.append(email)
+
+                if latest_emails:
+                    print(f"✅ 成功获取了 {len(latest_emails)} 封邮件")
 
                     # 保存邮件
                     saved_count = 0
-                    for email in emails:
+                    db_saved_count = 0
+                    db = self.main_cli.get_db()
+
+                    for i, email in enumerate(latest_emails, 1):
                         try:
+                            print(
+                                f"📧 处理邮件 {i}/{len(latest_emails)}: {email.subject or '(无主题)'}"
+                            )
+
                             # 确保目录存在
                             inbox_dir = os.path.join(EMAIL_STORAGE_DIR, "inbox")
                             os.makedirs(inbox_dir, exist_ok=True)
 
-                            # 保存邮件
+                            # 保存邮件文件
                             filepath = client.save_email_as_eml(email, inbox_dir)
                             if filepath:
                                 saved_count += 1
-                                print(f"已保存邮件: {email.subject}")
+
+                                # 保存到数据库
+                                try:
+                                    with open(filepath, "r", encoding="utf-8") as f:
+                                        eml_content = f.read()
+
+                                    from_addr = (
+                                        str(email.from_addr)
+                                        if email.from_addr
+                                        else "unknown@localhost"
+                                    )
+                                    to_addrs = (
+                                        [str(addr) for addr in email.to_addrs]
+                                        if email.to_addrs
+                                        else ["unknown@localhost"]
+                                    )
+
+                                    success = db.save_email(
+                                        message_id=email.message_id,
+                                        from_addr=from_addr,
+                                        to_addrs=to_addrs,
+                                        subject=email.subject or "",
+                                        date=email.date,
+                                        content=eml_content,
+                                    )
+
+                                    if success:
+                                        db_saved_count += 1
+
+                                except Exception as db_err:
+                                    logger.error(f"保存邮件到数据库失败: {db_err}")
+
                         except Exception as e:
                             logger.error(f"保存邮件失败: {e}")
-                            print(f"保存邮件失败: {e}")
+                            print(f"❌ 保存邮件失败: {e}")
 
-                    print(f"\n成功保存了 {saved_count} 封邮件到: {inbox_dir}")
+                    print(f"\n🎉 接收完成!")
+                    print(f"✅ 成功保存了 {saved_count} 封邮件到: {inbox_dir}")
+                    print(f"✅ 成功保存了 {db_saved_count} 封邮件到数据库")
                 else:
-                    print("未获取到任何邮件")
+                    print("❌ 未获取到任何邮件")
 
         except Exception as e:
-            logger.error(f"接收邮件时出错: {e}")
-            print(f"接收邮件时出错: {e}")
+            logger.error(f"接收最新邮件时出错: {e}")
+            print(f"❌ 接收最新邮件时出错: {e}")
 
         input("\n按回车键继续...")
 
     def _receive_unread_emails(self):
         """接收未读邮件"""
-        print("\n注意: POP3协议不支持直接获取未读邮件。")
-        print("此功能将获取所有邮件，并在本地标记为未读。")
-        input("按回车键继续...")
-        self._receive_all_emails()
+        print("\n⚠️  接收未读邮件功能正在开发中...")
+        print("💡 您可以使用 '接收所有邮件' 或 '接收最新邮件' 功能")
+        input("\n按回车键继续...")
 
     def _set_email_filters(self):
         """设置邮件过滤条件"""
         self.main_cli.clear_screen()
-        print("\n===== 设置邮件过滤条件 =====")
-        print("注意: 过滤条件将应用于下次接收邮件时")
-
-        # 获取过滤条件
-        sender = input("发件人 (留空表示不过滤): ")
-        subject = input("主题包含 (留空表示不过滤): ")
-        since_date = input("起始日期 (格式: YYYY-MM-DD, 留空表示不过滤): ")
-
-        # 保存过滤条件
-        self.email_filters = {
-            "sender": sender if sender else None,
-            "subject": subject if subject else None,
-            "since_date": since_date if since_date else None,
-        }
-
-        print("\n过滤条件已设置")
-        input("按回车键继续...")
+        print("\n" + "=" * 60)
+        print("🔍 邮件过滤设置")
+        print("=" * 60)
+        print("⚠️  邮件过滤功能正在开发中...")
+        print("\n💡 计划支持的过滤条件:")
+        print("   • 发件人过滤")
+        print("   • 主题关键词过滤")
+        print("   • 日期范围过滤")
+        print("   • 附件类型过滤")
+        print("   • 邮件大小过滤")
+        input("\n按回车键继续...")
 
     def _import_existing_emails(self):
-        """导入现有的邮件文件到数据库"""
+        """导入现有邮件文件"""
         self.main_cli.clear_screen()
-        print("\n===== 导入现有邮件文件 =====")
+        print("\n" + "=" * 60)
+        print("📁 导入邮件文件")
+        print("=" * 60)
 
-        import glob
-
-        # 查找所有.eml文件
-        inbox_dir = os.path.join(EMAIL_STORAGE_DIR, "inbox")
-        if not os.path.exists(inbox_dir):
-            print(f"收件箱目录不存在: {inbox_dir}")
-            input("\n按回车键继续...")
+        import_path = input("📂 请输入邮件文件或目录路径: ").strip()
+        if not import_path:
+            print("❌ 路径不能为空")
+            input("按回车键继续...")
             return
 
-        eml_files = glob.glob(os.path.join(inbox_dir, "*.eml"))
-
-        if not eml_files:
-            print(f"在 {inbox_dir} 中没有找到.eml文件")
-            input("\n按回车键继续...")
+        if not os.path.exists(import_path):
+            print(f"❌ 路径不存在: {import_path}")
+            input("按回车键继续...")
             return
 
-        print(f"找到 {len(eml_files)} 个邮件文件")
+        try:
+            imported_count = 0
+            db = self.main_cli.get_db()
 
-        # 询问是否继续
-        confirm = input("\n是否导入这些邮件到数据库? (y/n): ").lower()
-        if confirm != "y":
-            print("已取消导入")
-            input("\n按回车键继续...")
-            return
+            if os.path.isfile(import_path):
+                # 单个文件
+                if import_path.lower().endswith(".eml"):
+                    print(f"🔄 正在导入邮件文件: {os.path.basename(import_path)}")
 
-        # 获取数据库服务
-        db = self.main_cli.get_db()
+                    with open(import_path, "r", encoding="utf-8") as f:
+                        eml_content = f.read()
 
-        imported_count = 0
-        skipped_count = 0
-        failed_count = 0
-
-        print("\n开始导入邮件...")
-
-        for eml_file in eml_files:
-            file_name = os.path.basename(eml_file)
-            print(f"\n处理文件: {file_name}")
-
-            try:
-                # 读取邮件文件
-                with open(eml_file, "r", encoding="utf-8") as f:
-                    eml_content = f.read()
-
-                # 解析邮件
-                from common.email_format_handler import EmailFormatHandler
-
-                try:
-                    parsed_email = EmailFormatHandler.parse_mime_message(eml_content)
-
-                    print(f"  Message-ID: {parsed_email.message_id}")
-                    print(f"  Subject: {parsed_email.subject}")
-                    print(f"  From: {parsed_email.from_addr}")
-
-                    # 检查是否已存在
-                    existing = db.get_email(parsed_email.message_id)
-                    if existing:
-                        print(f"  ⚠️ 邮件已存在，跳过")
-                        skipped_count += 1
-                        continue
-
-                    # 保存新邮件
+                    # 这里可以添加解析EML文件的逻辑
+                    # 暂时使用简单的保存方式
                     success = db.save_email(
-                        message_id=parsed_email.message_id,
-                        from_addr=str(parsed_email.from_addr),
-                        to_addrs=[str(addr) for addr in parsed_email.to_addrs],
-                        subject=parsed_email.subject or "",
-                        date=parsed_email.date,
+                        message_id=f"imported_{os.path.basename(import_path)}",
+                        from_addr="imported@localhost",
+                        to_addrs=["user@localhost"],
+                        subject=f"导入的邮件: {os.path.basename(import_path)}",
+                        date=None,
                         content=eml_content,
                     )
 
                     if success:
-                        print(f"  ✓ 导入成功")
-                        imported_count += 1
+                        imported_count = 1
+                        print("✅ 邮件导入成功")
                     else:
-                        print(f"  ✗ 导入失败")
-                        failed_count += 1
+                        print("❌ 邮件导入失败")
+                else:
+                    print("❌ 不支持的文件格式，请选择.eml文件")
 
-                except Exception as parse_e:
-                    print(f"  ✗ 解析失败: {parse_e}")
-                    failed_count += 1
+            elif os.path.isdir(import_path):
+                # 目录
+                print(f"🔄 正在扫描目录: {import_path}")
+                eml_files = []
+                for root, dirs, files in os.walk(import_path):
+                    for file in files:
+                        if file.lower().endswith(".eml"):
+                            eml_files.append(os.path.join(root, file))
 
-            except Exception as e:
-                print(f"  ✗ 读取文件失败: {e}")
-                failed_count += 1
+                if not eml_files:
+                    print("❌ 目录中没有找到.eml文件")
+                else:
+                    print(f"📊 找到 {len(eml_files)} 个邮件文件")
+                    confirm = input("确认导入所有邮件文件? (Y/n): ").strip().lower()
 
-        print(f"\n=== 导入完成 ===")
-        print(f"成功导入: {imported_count} 封")
-        print(f"跳过重复: {skipped_count} 封")
-        print(f"导入失败: {failed_count} 封")
+                    if confirm not in ["n", "no"]:
+                        for eml_file in eml_files:
+                            try:
+                                print(f"📧 导入: {os.path.basename(eml_file)}")
+
+                                with open(eml_file, "r", encoding="utf-8") as f:
+                                    eml_content = f.read()
+
+                                success = db.save_email(
+                                    message_id=f"imported_{os.path.basename(eml_file)}",
+                                    from_addr="imported@localhost",
+                                    to_addrs=["user@localhost"],
+                                    subject=f"导入的邮件: {os.path.basename(eml_file)}",
+                                    date=None,
+                                    content=eml_content,
+                                )
+
+                                if success:
+                                    imported_count += 1
+
+                            except Exception as e:
+                                logger.error(f"导入邮件失败: {eml_file}, 错误: {e}")
+                                print(f"❌ 导入失败: {os.path.basename(eml_file)}")
+                    else:
+                        print("❌ 导入操作已取消")
+
+            print(f"\n🎉 导入完成! 成功导入 {imported_count} 封邮件")
+
+        except Exception as e:
+            logger.error(f"导入邮件时出错: {e}")
+            print(f"❌ 导入邮件时出错: {e}")
 
         input("\n按回车键继续...")

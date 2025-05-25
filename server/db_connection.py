@@ -32,7 +32,7 @@ class DatabaseConnection:
 
         logger.info(f"数据库连接管理器已初始化: {db_path}")
 
-    def get_connection(self, timeout: float = 30.0) -> sqlite3.Connection:
+    def get_connection(self, timeout: float = 5.0) -> sqlite3.Connection:
         """
         获取数据库连接，带有超时和重试机制
 
@@ -48,12 +48,12 @@ class DatabaseConnection:
         start_time = time.time()
         last_error: Optional[Exception] = None
         retry_count = 0
-        max_retries = 10  # 增加重试次数
+        max_retries = 5  # 减少重试次数
 
         while time.time() - start_time < timeout and retry_count < max_retries:
             try:
-                # 设置更短的单次连接超时，但允许更多重试
-                conn = sqlite3.connect(self.db_path, timeout=2.0)
+                # 设置更短的单次连接超时
+                conn = sqlite3.connect(self.db_path, timeout=1.0)
 
                 # 启用外键约束
                 conn.execute("PRAGMA foreign_keys = ON")
@@ -62,7 +62,12 @@ class DatabaseConnection:
                 conn.execute("PRAGMA journal_mode = WAL")
 
                 # 设置更短的忙等待超时
-                conn.execute("PRAGMA busy_timeout = 2000")  # 2秒
+                conn.execute("PRAGMA busy_timeout = 1000")  # 1秒
+
+                # 设置其他优化参数
+                conn.execute("PRAGMA synchronous = NORMAL")
+                conn.execute("PRAGMA cache_size = 2000")
+                conn.execute("PRAGMA temp_store = MEMORY")
 
                 return conn
             except sqlite3.OperationalError as e:
@@ -71,9 +76,9 @@ class DatabaseConnection:
 
                 # 如果是"database is locked"错误，等待一段时间后重试
                 if "database is locked" in str(e) or "database is busy" in str(e):
-                    wait_time = min(0.1 * (2**retry_count), 1.0)  # 指数退避，最大1秒
+                    wait_time = min(0.05 * (2**retry_count), 0.5)  # 指数退避，最大0.5秒
                     logger.debug(
-                        f"数据库忙碌，等待 {wait_time:.2f} 秒后重试 (第 {retry_count} 次)"
+                        f"数据库忙碌，等待 {wait_time:.3f} 秒后重试 (第 {retry_count} 次)"
                     )
                     time.sleep(wait_time)
                 else:
@@ -203,41 +208,64 @@ class DatabaseConnection:
             logger.error(f"执行数据库查询时出错: {e}")
             raise
 
-    def execute_insert(self, table: str, data: dict) -> bool:
+    def execute_insert(
+        self, table: str, data: dict, ignore_duplicates: bool = True
+    ) -> bool:
         """
         执行插入操作，带有强化的重试机制
 
         Args:
             table: 表名
             data: 要插入的数据字典
+            ignore_duplicates: 是否忽略重复记录（使用INSERT OR IGNORE）
 
         Returns:
             bool: 操作是否成功
         """
-        max_retries = 10  # 增加重试次数
+        max_retries = 3
         for attempt in range(max_retries):
             try:
                 columns = ", ".join(data.keys())
                 placeholders = ", ".join(["?" for _ in data])
-                query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
+
+                # 根据参数选择INSERT语句类型
+                if ignore_duplicates:
+                    query = f"INSERT OR IGNORE INTO {table} ({columns}) VALUES ({placeholders})"
+                else:
+                    query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
 
                 conn = self.get_connection()
                 cursor = conn.cursor()
                 cursor.execute(query, tuple(data.values()))
+
+                # 检查是否实际插入了数据
+                rows_affected = cursor.rowcount
+
                 conn.commit()
                 conn.close()
 
                 if attempt > 0:
                     logger.info(f"插入操作在第 {attempt + 1} 次尝试后成功: {table}")
 
-                return True
+                # 如果使用INSERT OR IGNORE，即使没有插入也算成功
+                if ignore_duplicates:
+                    if rows_affected == 0:
+                        logger.debug(f"记录已存在，跳过插入: {table}")
+                    return True
+                else:
+                    return rows_affected > 0
+
             except sqlite3.IntegrityError as e:
-                # 主键冲突等完整性错误，不需要重试
+                # 主键冲突等完整性错误
                 if "UNIQUE constraint failed" in str(e) or "PRIMARY KEY" in str(e):
-                    logger.debug(
-                        f"插入数据时发生完整性错误（主键重复）: {table} - {str(e)}"
-                    )
-                    return False
+                    if ignore_duplicates:
+                        logger.debug(f"记录已存在（主键重复），跳过插入: {table}")
+                        return True
+                    else:
+                        logger.warning(
+                            f"插入数据时发生完整性错误（主键重复）: {table} - {str(e)}"
+                        )
+                        return False
                 else:
                     logger.warning(f"插入数据时发生完整性错误: {table} - {str(e)}")
                     return False
@@ -245,8 +273,8 @@ class DatabaseConnection:
                 if (
                     "database is locked" in str(e) or "database is busy" in str(e)
                 ) and attempt < max_retries - 1:
-                    # 使用指数退避，但限制最大等待时间为2秒
-                    wait_time = min(0.1 * (2**attempt), 2.0)
+                    # 使用指数退避，但限制最大等待时间为1秒
+                    wait_time = min(0.1 * (2**attempt), 1.0)
                     if attempt == 0:
                         logger.debug(f"插入操作数据库忙碌，开始重试机制: {table}")
                     logger.debug(
