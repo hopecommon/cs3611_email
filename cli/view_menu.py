@@ -75,14 +75,14 @@ class ViewEmailMenu:
         print(f"\n" + "=" * 60)
         print(f"{folder}")
         print("=" * 60)
-        
+
         # +++ 新增过滤选项 +++
         print("\n🔍 过滤选项:")
         print("1. 显示所有邮件")
         print("2. 仅显示正常邮件")
         print("3. 仅显示垃圾邮件")
         filter_choice = input("请选择过滤方式 [1-3]: ").strip() or "1"
-    
+
         # 设置过滤参数
         include_spam = True
         if filter_choice == "2":
@@ -94,11 +94,16 @@ class ViewEmailMenu:
         try:
             db = self.main_cli.get_db()
             if self.main_cli.get_current_folder() == "sent":
-                emails = db.list_sent_emails()
+                emails = db.list_sent_emails(
+                    include_spam=(filter_choice != "2"),  # 仅当选择2时不包含垃圾邮件
+                    is_spam=(
+                        (filter_choice == "3") if filter_choice == "3" else None
+                    ),  # 仅当选择3时过滤垃圾邮件
+                )
             else:
                 emails = db.list_emails(
                     include_spam=(filter_choice != "2"),  # 仅当选择2时不包含垃圾邮件
-                    is_spam=(filter_choice == "3")        # 仅当选择3时过滤垃圾邮件
+                    is_spam=(filter_choice == "3"),  # 仅当选择3时过滤垃圾邮件
                 )
 
             if not emails:
@@ -176,12 +181,19 @@ class ViewEmailMenu:
             db = self.main_cli.get_db()
             message_id = current_email.get("message_id")
 
+            # 判断邮件类型：检查当前文件夹或邮件来源
+            current_folder = self.main_cli.get_current_folder()
+            is_sent_email = (current_folder == "sent") or current_email.get(
+                "type"
+            ) == "sent"
+
             # 根据邮件类型选择不同的获取方法
-            email_type = current_email.get("type", "received")
-            if email_type == "sent":
+            if is_sent_email:
                 content_str = db.get_sent_email_content(message_id)
+                logger.debug(f"获取已发送邮件内容: {message_id}")
             else:
                 content_str = db.get_email_content(message_id)
+                logger.debug(f"获取接收邮件内容: {message_id}")
 
             if content_str:
                 # 使用EmailFormatHandler解析完整的邮件信息
@@ -215,32 +227,31 @@ class ViewEmailMenu:
                     print(f"📧 收件人: {to_addrs}")
                     print(f"📅 日期: {date}")
 
+                    # 显示邮件类型
+                    email_type = "已发送" if is_sent_email else "收件箱"
+                    print(f"📁 类型: {email_type}")
+
                     # 显示附件信息
                     if parsed_email.attachments:
-                        print(f"\n📎 附件信息 ({len(parsed_email.attachments)} 个):")
-                        print("-" * 60)
+                        print(f"\n📎 附件 ({len(parsed_email.attachments)} 个):")
                         for i, attachment in enumerate(parsed_email.attachments, 1):
-                            size_mb = (
-                                attachment.size / (1024 * 1024)
-                                if attachment.size > 1024 * 1024
-                                else attachment.size / 1024
+                            size_str = (
+                                f"{attachment.size} 字节"
+                                if attachment.size
+                                else "未知大小"
                             )
-                            size_unit = "MB" if attachment.size > 1024 * 1024 else "KB"
-                            print(f"  {i}. 📄 {attachment.filename}")
-                            print(f"     📊 类型: {attachment.content_type}")
-                            print(f"     📏 大小: {size_mb:.2f} {size_unit}")
+                            print(f"  {i}. {attachment.filename} ({size_str})")
 
                         # 询问是否保存附件
-                        save_choice = (
-                            input(f"\n💾 是否保存附件? (Y/n): ").strip().lower()
-                        )
-                        if save_choice not in ["n", "no"]:
+                        save_choice = input("\n是否保存附件? (y/n): ").lower()
+                        if save_choice == "y":
                             self._save_attachments(parsed_email.attachments)
 
-                    # 显示邮件正文
+                    # 显示邮件内容
                     print("\n" + "-" * 60)
-                    print("📝 邮件正文")
+                    print("📝 邮件内容:")
                     print("-" * 60)
+
                     if parsed_email.text_content:
                         content = parsed_email.text_content.strip()
                         if len(content) > 2000:
@@ -280,8 +291,15 @@ class ViewEmailMenu:
         try:
             if not current_email.get("is_read"):
                 db = self.main_cli.get_db()
-                db.update_email(current_email.get("message_id"), is_read=True)
-                print("\n📬 邮件已标记为已读")
+                success = db.update_email(current_email.get("message_id"), is_read=True)
+                if success:
+                    print("\n📬 邮件已标记为已读")
+                    # 更新本地邮件列表中的状态
+                    current_email["is_read"] = True
+                else:
+                    logger.warning(
+                        f"标记邮件为已读失败: {current_email.get('message_id')}"
+                    )
         except Exception as e:
             logger.error(f"标记邮件为已读时出错: {e}")
 

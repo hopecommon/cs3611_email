@@ -26,20 +26,30 @@ class EmailContentManager:
         os.makedirs(EMAIL_STORAGE_DIR, exist_ok=True)
         logger.info("邮件内容管理器已初始化")
 
-    def save_content(self, message_id: str, content: str) -> Optional[str]:
+    def save_content(
+        self, message_id: str, content: str, metadata: Optional[Dict[str, Any]] = None
+    ) -> Optional[str]:
         """
         保存邮件内容
 
         Args:
             message_id: 邮件ID
             content: 邮件内容
+            metadata: 邮件元数据（可选，用于补充缺失的头部）
 
         Returns:
             保存的文件路径，失败返回None
         """
         try:
-            # 使用统一的格式处理器确保邮件格式正确
-            formatted_content = EmailFormatHandler.ensure_proper_format(content)
+            # 如果提供了元数据，确保邮件格式正确
+            if metadata:
+                # 使用元数据补充和修复邮件内容
+                content = self._ensure_proper_email_format_with_metadata(
+                    content, message_id, metadata
+                )
+            else:
+                # 使用统一的格式处理器确保邮件格式正确
+                formatted_content = EmailFormatHandler.ensure_proper_format(content)
 
             safe_filename = self._generate_safe_filename(message_id)
             filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_filename}.eml")
@@ -51,7 +61,7 @@ class EmailContentManager:
 
             # 保存格式化后的内容
             with open(filepath, "w", encoding="utf-8") as f:
-                f.write(formatted_content)
+                f.write(content)
 
             logger.info(f"已保存邮件内容: {filepath}")
             return filepath
@@ -113,6 +123,105 @@ class EmailContentManager:
         safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id)
         # 确保没有前导或尾随空格
         return safe_id.strip()
+
+    def _ensure_proper_email_format_with_metadata(
+        self, content: str, message_id: str, metadata: Dict[str, Any]
+    ) -> str:
+        """
+        使用元数据确保邮件格式正确，补充缺失的头部
+
+        Args:
+            content: 原始邮件内容
+            message_id: 邮件ID
+            metadata: 邮件元数据
+
+        Returns:
+            格式化后的邮件内容
+        """
+        try:
+            import email
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+
+            # 尝试解析现有邮件
+            try:
+                msg = email.message_from_string(content)
+            except:
+                # 如果解析失败，创建新的邮件对象
+                msg = MIMEText("", "plain", "utf-8")
+                # 将原始内容作为邮件正文
+                if content.strip():
+                    msg.set_payload(content)
+
+            # 检查并补充必需的头部字段
+            needs_update = False
+
+            # Message-ID
+            if not msg.get("Message-ID"):
+                msg["Message-ID"] = message_id
+                needs_update = True
+
+            # From字段
+            if not msg.get("From") and metadata.get("from_addr"):
+                msg["From"] = metadata["from_addr"]
+                needs_update = True
+
+            # To字段
+            if not msg.get("To") and metadata.get("to_addrs"):
+                to_addrs = metadata["to_addrs"]
+                if isinstance(to_addrs, list):
+                    msg["To"] = ", ".join(to_addrs)
+                else:
+                    msg["To"] = str(to_addrs)
+                needs_update = True
+
+            # CC字段
+            if not msg.get("Cc") and metadata.get("cc_addrs"):
+                cc_addrs = metadata["cc_addrs"]
+                if isinstance(cc_addrs, list) and cc_addrs:
+                    msg["Cc"] = ", ".join(cc_addrs)
+                needs_update = True
+
+            # Subject字段
+            if not msg.get("Subject") and metadata.get("subject"):
+                msg["Subject"] = metadata["subject"]
+                needs_update = True
+
+            # Date字段
+            if not msg.get("Date") and metadata.get("date"):
+                try:
+                    import datetime
+
+                    if isinstance(metadata["date"], str):
+                        date_obj = datetime.datetime.fromisoformat(metadata["date"])
+                    else:
+                        date_obj = metadata["date"]
+                    msg["Date"] = date_obj.strftime("%a, %d %b %Y %H:%M:%S %z")
+                except:
+                    msg["Date"] = datetime.datetime.now().strftime(
+                        "%a, %d %b %Y %H:%M:%S %z"
+                    )
+                needs_update = True
+
+            # MIME版本
+            if not msg.get("MIME-Version"):
+                msg["MIME-Version"] = "1.0"
+                needs_update = True
+
+            # Content-Type（如果没有的话）
+            if not msg.get("Content-Type"):
+                msg["Content-Type"] = "text/plain; charset=utf-8"
+                needs_update = True
+
+            if needs_update:
+                logger.debug(f"补充邮件头部: {message_id}")
+                return str(msg)
+            else:
+                return content
+
+        except Exception as e:
+            logger.warning(f"邮件格式化失败，使用原始内容: {message_id} - {e}")
+            return content
 
     def _try_load_content(
         self, message_id: str, metadata: Optional[Dict[str, Any]] = None

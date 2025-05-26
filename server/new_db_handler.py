@@ -10,6 +10,7 @@ from typing import List, Dict, Optional, Any, Union
 
 from common.utils import setup_logging
 from common.config import DB_PATH, EMAIL_STORAGE_DIR
+from common.email_validator import EmailValidator
 from .db_connection import DatabaseConnection
 from .email_repository import EmailRepository
 from .email_content_manager import EmailContentManager
@@ -42,6 +43,7 @@ class EmailService:
         self.email_repo = EmailRepository(self.db_connection)
         self.content_manager = EmailContentManager()
         self.spam_filter = KeywordSpamFilter()
+        self.email_validator = EmailValidator()
 
         # 初始化数据库
         self.db_connection.init_database()
@@ -76,31 +78,66 @@ class EmailService:
             bool: 操作是否成功
         """
         try:
+            # 准备邮件数据进行验证
+            email_data = {
+                "message_id": message_id,
+                "from_addr": from_addr,
+                "to_addrs": to_addrs,
+                "subject": subject,
+                "date": (
+                    date.isoformat() if date else datetime.datetime.now().isoformat()
+                ),
+                "content": content,
+            }
+
+            # 验证邮件数据
+            validation_result = self.email_validator.validate_email_data(email_data)
+
+            if not validation_result["is_valid"]:
+                logger.error(f"邮件数据验证失败: {validation_result['errors']}")
+                return False
+
+            if validation_result["warnings"]:
+                logger.warning(f"邮件数据警告: {validation_result['warnings']}")
+
+            # 清理和标准化邮件数据
+            sanitized_data = self.email_validator.sanitize_email_data(email_data)
+
+            # 使用清理后的数据
+            message_id = sanitized_data["message_id"]
+            from_addr = sanitized_data["from_addr"]
+            to_addrs = sanitized_data["to_addrs"]
+            subject = sanitized_data["subject"]
+            date = datetime.datetime.fromisoformat(sanitized_data["date"])
+
             # 标准化收件人地址
             if isinstance(to_addrs, str):
                 to_addrs = [to_addrs]
 
-            # 使用当前时间作为默认日期
-            if not date:
-                date = datetime.datetime.now()
-                
             # 在保存前进行垃圾邮件检测
-            spam_result = self.spam_filter.analyze_email({
-                'from_addr': from_addr,
-                'subject': subject,
-                'content': content
-            })
-        
+            spam_result = self.spam_filter.analyze_email(
+                {"from_addr": from_addr, "subject": subject, "content": content}
+            )
+
             # 更新保存参数
-            kwargs.update({
-                'is_spam': spam_result['is_spam'],
-                'spam_score': spam_result['score']
-            })
+            kwargs.update(
+                {"is_spam": spam_result["is_spam"], "spam_score": spam_result["score"]}
+            )
 
             # 保存邮件内容（如果提供）
             content_path = None
             if content:
-                content_path = self.content_manager.save_content(message_id, content)
+                # 传递元数据给内容管理器，确保正确的头部格式
+                metadata = {
+                    "message_id": message_id,
+                    "from_addr": from_addr,
+                    "to_addrs": to_addrs,
+                    "subject": subject,
+                    "date": date.isoformat(),
+                }
+                content_path = self.content_manager.save_content(
+                    message_id, content, metadata
+                )
 
             # 创建邮件记录
             email_record = EmailRecord(
@@ -208,7 +245,27 @@ class EmailService:
             bool: 操作是否成功
         """
         try:
-            return self.email_repo.update_email_status(message_id, **updates)
+            # 检查邮件是否存在于接收邮件表
+            received_email = self.email_repo.get_email_by_id(message_id)
+
+            if received_email:
+                # 邮件在接收邮件表中，更新接收邮件状态
+                success = self.email_repo.update_email_status(message_id, **updates)
+            else:
+                # 邮件不在接收邮件表中，尝试更新已发送邮件
+                # 对于已发送邮件，只支持部分字段更新
+                sent_updates = {}
+                if "is_read" in updates:
+                    sent_updates["is_read"] = updates["is_read"]
+                if "status" in updates:
+                    sent_updates["status"] = updates["status"]
+
+                if sent_updates:
+                    success = self.email_repo.update_sent_email_status(
+                        message_id, **sent_updates
+                    )
+
+            return success
         except Exception as e:
             logger.error(f"更新邮件时出错: {e}")
             return False
@@ -248,7 +305,7 @@ class EmailService:
         **kwargs,
     ) -> bool:
         """
-        保存已发送邮件
+        保存已发送邮件（统一接口）
 
         Args:
             message_id: 邮件ID
@@ -256,7 +313,7 @@ class EmailService:
             to_addrs: 收件人地址
             subject: 邮件主题
             content: 邮件内容
-            date: 邮件日期
+            date: 发送日期
             cc_addrs: 抄送地址
             bcc_addrs: 密送地址
             **kwargs: 其他选项
@@ -265,34 +322,90 @@ class EmailService:
             bool: 操作是否成功
         """
         try:
+            # 准备邮件数据进行验证
+            email_data = {
+                "message_id": message_id,
+                "from_addr": from_addr,
+                "to_addrs": to_addrs,
+                "subject": subject,
+                "date": (
+                    date.isoformat() if date else datetime.datetime.now().isoformat()
+                ),
+                "content": content,
+            }
+
+            # 验证邮件数据
+            validation_result = self.email_validator.validate_email_data(email_data)
+
+            if not validation_result["is_valid"]:
+                logger.error(f"已发送邮件数据验证失败: {validation_result['errors']}")
+                return False
+
+            if validation_result["warnings"]:
+                logger.warning(f"已发送邮件数据警告: {validation_result['warnings']}")
+
+            # 清理和标准化邮件数据
+            sanitized_data = self.email_validator.sanitize_email_data(email_data)
+
+            # 使用清理后的数据
+            message_id = sanitized_data["message_id"]
+            from_addr = sanitized_data["from_addr"]
+            to_addrs = sanitized_data["to_addrs"]
+            subject = sanitized_data["subject"]
+            date = datetime.datetime.fromisoformat(sanitized_data["date"])
+
             # 标准化地址列表
             if isinstance(to_addrs, str):
                 to_addrs = [to_addrs]
+            if cc_addrs and isinstance(cc_addrs, str):
+                cc_addrs = [cc_addrs]
+            if bcc_addrs and isinstance(bcc_addrs, str):
+                bcc_addrs = [bcc_addrs]
 
-            if not date:
-                date = datetime.datetime.now()
-
-            # 保存邮件内容
+            # 保存邮件内容（如果提供）
             content_path = None
             if content:
-                content_path = self.content_manager.save_content(message_id, content)
+                # 传递元数据给内容管理器，确保正确的头部格式
+                metadata = {
+                    "message_id": message_id,
+                    "from_addr": from_addr,
+                    "to_addrs": to_addrs,
+                    "subject": subject,
+                    "date": date.isoformat(),
+                    "cc_addrs": cc_addrs,
+                    "bcc_addrs": bcc_addrs,
+                }
+                content_path = self.content_manager.save_content(
+                    message_id, content, metadata
+                )
 
             # 创建已发送邮件记录
-            sent_record = SentEmailRecord(
+            sent_email_record = SentEmailRecord(
                 message_id=message_id,
                 from_addr=from_addr,
                 to_addrs=to_addrs,
-                cc_addrs=cc_addrs,
-                bcc_addrs=bcc_addrs,
+                cc_addrs=cc_addrs or [],
+                bcc_addrs=bcc_addrs or [],
                 subject=subject,
                 date=date,
                 size=len(content) if content else 0,
                 has_attachments=kwargs.get("has_attachments", False),
                 content_path=content_path,
                 status=kwargs.get("status", "sent"),
+                is_read=kwargs.get("is_read", False),
             )
 
-            return self.email_repo.create_sent_email(sent_record)
+            # 保存到数据库
+            logger.debug(f"准备保存已发送邮件记录: {sent_email_record.to_dict()}")
+            success = self.email_repo.create_sent_email(sent_email_record)
+            logger.debug(f"数据库保存结果: {success}")
+
+            if success:
+                logger.info(f"已发送邮件保存成功: {message_id}")
+            else:
+                logger.error(f"已发送邮件数据库保存失败: {message_id}")
+
+            return success
         except Exception as e:
             logger.error(f"保存已发送邮件时出错: {e}")
             return False
@@ -327,13 +440,20 @@ class EmailService:
             return None
 
     def list_sent_emails(
-        self, from_addr: Optional[str] = None, limit: int = 100, offset: int = 0
+        self,
+        from_addr: Optional[str] = None,
+        include_spam: bool = True,
+        is_spam: Optional[bool] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """
         获取已发送邮件列表
 
         Args:
             from_addr: 发件人地址过滤
+            include_spam: 是否包含垃圾邮件
+            is_spam: 垃圾邮件过滤（None=全部，True=仅垃圾邮件，False=仅正常邮件）
             limit: 返回数量限制
             offset: 偏移量
 
@@ -342,7 +462,11 @@ class EmailService:
         """
         try:
             sent_records = self.email_repo.list_sent_emails(
-                from_addr=from_addr, limit=limit, offset=offset
+                from_addr=from_addr,
+                include_spam=include_spam,
+                is_spam=is_spam,
+                limit=limit,
+                offset=offset,
             )
 
             return [record.to_dict() for record in sent_records]

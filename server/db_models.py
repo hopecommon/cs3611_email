@@ -92,6 +92,7 @@ class SentEmailRecord:
     has_attachments: bool = False
     content_path: Optional[str] = None
     status: str = "sent"
+    is_read: bool = False
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "SentEmailRecord":
@@ -132,6 +133,7 @@ class SentEmailRecord:
             has_attachments=bool(data.get("has_attachments", False)),
             content_path=data.get("content_path"),
             status=data.get("status", "sent"),
+            is_read=bool(data.get("is_read", False)),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -148,6 +150,7 @@ class SentEmailRecord:
             "has_attachments": self.has_attachments,
             "content_path": self.content_path,
             "status": self.status,
+            "is_read": self.is_read,
         }
 
 

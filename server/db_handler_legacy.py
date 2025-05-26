@@ -174,7 +174,8 @@ class DatabaseHandler:
                 size INTEGER NOT NULL,
                 has_attachments INTEGER DEFAULT 0,
                 content_path TEXT,
-                status TEXT
+                status TEXT,
+                is_read INTEGER DEFAULT 0
             )
             """
             )

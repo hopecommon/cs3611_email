@@ -142,7 +142,7 @@ class EmailRepository:
             # 垃圾邮件过滤
             if not include_spam:
                 query += " AND is_spam = 0"
-                
+
             # is_spam 过滤条件
             if is_spam is not None:
                 query += " AND is_spam = ?"
@@ -244,13 +244,21 @@ class EmailRepository:
             # 转换地址列表为JSON
             data = sent_email_record.to_dict()
             data["to_addrs"] = json.dumps(data["to_addrs"])
-            if data["cc_addrs"]:
+
+            # 处理可选的地址字段，确保None和空列表都正确处理
+            if data["cc_addrs"] is not None:
                 data["cc_addrs"] = json.dumps(data["cc_addrs"])
-            if data["bcc_addrs"]:
+            else:
+                data["cc_addrs"] = None
+
+            if data["bcc_addrs"] is not None:
                 data["bcc_addrs"] = json.dumps(data["bcc_addrs"])
+            else:
+                data["bcc_addrs"] = None
 
             # 转换布尔值为整数
             data["has_attachments"] = 1 if data["has_attachments"] else 0
+            data["is_read"] = 1 if data["is_read"] else 0
 
             # 插入数据
             success = self.db.execute_insert("sent_emails", data)
@@ -288,13 +296,20 @@ class EmailRepository:
             return None
 
     def list_sent_emails(
-        self, from_addr: Optional[str] = None, limit: int = 100, offset: int = 0
+        self,
+        from_addr: Optional[str] = None,
+        include_spam: bool = True,
+        is_spam: Optional[bool] = None,
+        limit: int = 100,
+        offset: int = 0,
     ) -> List[SentEmailRecord]:
         """
         获取已发送邮件列表
 
         Args:
             from_addr: 发件人地址
+            include_spam: 是否包含垃圾邮件
+            is_spam: 垃圾邮件过滤（None=全部，True=仅垃圾邮件，False=仅正常邮件）
             limit: 返回的最大数量
             offset: 偏移量
 
@@ -310,6 +325,15 @@ class EmailRepository:
             if from_addr:
                 query += " AND from_addr = ?"
                 params.append(from_addr)
+
+            # 垃圾邮件过滤
+            if not include_spam:
+                query += " AND (is_spam = 0 OR is_spam IS NULL)"
+            elif is_spam is not None:
+                if is_spam:
+                    query += " AND is_spam = 1"
+                else:
+                    query += " AND (is_spam = 0 OR is_spam IS NULL)"
 
             # 排序和分页
             query += " ORDER BY date DESC LIMIT ? OFFSET ?"
@@ -460,3 +484,42 @@ class EmailRepository:
         except Exception as e:
             logger.error(f"搜索邮件时出错: {e}")
             return []
+
+    def update_sent_email_status(self, message_id: str, **status_updates) -> bool:
+        """
+        更新已发送邮件状态
+
+        Args:
+            message_id: 邮件ID
+            **status_updates: 状态更新字典（is_read等）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            # 过滤有效的状态字段
+            valid_fields = {"is_read", "status"}
+            data = {}
+
+            for key, value in status_updates.items():
+                if key in valid_fields:
+                    if key == "is_read":
+                        data[key] = 1 if value else 0
+                    else:
+                        data[key] = value
+
+            if not data:
+                logger.warning("没有有效的状态更新字段")
+                return False
+
+            success = self.db.execute_update(
+                "sent_emails", data, "message_id = ?", (message_id,)
+            )
+
+            if success:
+                logger.info(f"已更新已发送邮件状态: {message_id}")
+
+            return success
+        except Exception as e:
+            logger.error(f"更新已发送邮件状态时出错: {e}")
+            return False
