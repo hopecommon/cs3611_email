@@ -18,10 +18,10 @@ from .receive_menu import ReceiveEmailMenu
 from .view_menu import ViewEmailMenu
 from .search_menu import SearchEmailMenu
 from .modern_settings_menu import ModernSettingsMenu
+from .spam_menu import SpamManagementMenu
 
 # 设置日志
 logger = setup_logging("cli")
-
 
 class EmailCLI:
     """邮件客户端命令行界面"""
@@ -41,6 +41,7 @@ class EmailCLI:
         self.receive_menu = ReceiveEmailMenu(self)
         self.view_menu = ViewEmailMenu(self)
         self.search_menu = SearchEmailMenu(self)
+        self.spam_menu = SpamManagementMenu(self)
 
     def main_menu(self):
         """显示主菜单并处理用户输入"""
@@ -63,10 +64,11 @@ class EmailCLI:
             print("4. 🔍 搜索邮件")
             print("5. ⚙️  账户设置")
             print("6. 📊 系统状态")
+            print("7. 🛡️  垃圾邮件管理")
             print("0. 👋 退出程序")
             print("=" * 60)
 
-            choice = input("\n请选择操作 [0-6]: ").strip()
+            choice = input("\n请选择操作 [0-7]: ").strip()
 
             if choice == "1":
                 self._handle_send_email()
@@ -80,6 +82,8 @@ class EmailCLI:
                 self.settings_menu.show_menu()
             elif choice == "6":
                 self._show_system_status()
+            elif choice == "7":
+                self.spam_menu.show_menu()
             elif choice == "0":
                 self._exit_program()
             else:

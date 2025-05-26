@@ -14,6 +14,7 @@ from .db_connection import DatabaseConnection
 from .email_repository import EmailRepository
 from .email_content_manager import EmailContentManager
 from .db_models import EmailRecord, SentEmailRecord
+from spam_filter.spam_filter import KeywordSpamFilter
 
 # 设置日志
 logger = setup_logging("new_db_handler")
@@ -40,6 +41,7 @@ class EmailService:
         self.db_connection = DatabaseConnection(db_path)
         self.email_repo = EmailRepository(self.db_connection)
         self.content_manager = EmailContentManager()
+        self.spam_filter = KeywordSpamFilter()
 
         # 初始化数据库
         self.db_connection.init_database()
@@ -81,6 +83,19 @@ class EmailService:
             # 使用当前时间作为默认日期
             if not date:
                 date = datetime.datetime.now()
+                
+            # 在保存前进行垃圾邮件检测
+            spam_result = self.spam_filter.analyze_email({
+                'from_addr': from_addr,
+                'subject': subject,
+                'content': content
+            })
+        
+            # 更新保存参数
+            kwargs.update({
+                'is_spam': spam_result['is_spam'],
+                'spam_score': spam_result['score']
+            })
 
             # 保存邮件内容（如果提供）
             content_path = None
@@ -147,7 +162,8 @@ class EmailService:
         self,
         user_email: Optional[str] = None,
         include_deleted: bool = False,
-        include_spam: bool = False,
+        include_spam: bool = True,
+        is_spam: Optional[bool] = None,  # 新增过滤参数
         limit: int = 100,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
@@ -169,6 +185,7 @@ class EmailService:
                 user_email=user_email,
                 include_deleted=include_deleted,
                 include_spam=include_spam,
+                is_spam=is_spam,
                 limit=limit,
                 offset=offset,
             )

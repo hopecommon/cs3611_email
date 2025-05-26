@@ -75,6 +75,20 @@ class ViewEmailMenu:
         print(f"\n" + "=" * 60)
         print(f"{folder}")
         print("=" * 60)
+        
+        # +++ 新增过滤选项 +++
+        print("\n🔍 过滤选项:")
+        print("1. 显示所有邮件")
+        print("2. 仅显示正常邮件")
+        print("3. 仅显示垃圾邮件")
+        filter_choice = input("请选择过滤方式 [1-3]: ").strip() or "1"
+    
+        # 设置过滤参数
+        include_spam = True
+        if filter_choice == "2":
+            include_spam = False
+        elif filter_choice == "3":
+            include_spam = True  # 仅显示垃圾邮件需要调整数据库查询条件
 
         # 从数据库获取邮件列表
         try:
@@ -82,7 +96,10 @@ class ViewEmailMenu:
             if self.main_cli.get_current_folder() == "sent":
                 emails = db.list_sent_emails()
             else:
-                emails = db.list_emails()
+                emails = db.list_emails(
+                    include_spam=(filter_choice != "2"),  # 仅当选择2时不包含垃圾邮件
+                    is_spam=(filter_choice == "3")        # 仅当选择3时过滤垃圾邮件
+                )
 
             if not emails:
                 print(f"📭 {folder}中没有邮件")

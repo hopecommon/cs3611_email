@@ -90,6 +90,7 @@ class EmailRepository:
         user_email: Optional[str] = None,
         include_deleted: bool = False,
         include_spam: bool = False,
+        is_spam: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> List[EmailRecord]:
@@ -141,6 +142,11 @@ class EmailRepository:
             # 垃圾邮件过滤
             if not include_spam:
                 query += " AND is_spam = 0"
+                
+            # is_spam 过滤条件
+            if is_spam is not None:
+                query += " AND is_spam = ?"
+                params.append(1 if is_spam else 0)  # SQLite用1/0表示布尔
 
             # 排序和分页
             query += " ORDER BY date DESC LIMIT ? OFFSET ?"

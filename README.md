@@ -94,7 +94,8 @@ python -m client.pop3_cli \
 │   ├── integration/      # 集成测试
 │   └── performance/      # 性能测试
 ├── docs/                  # 文档
-└── data/                  # 数据文件
+├── data/                  # 数据文件
+└── spam_filter/           # 垃圾邮件过滤
 ```
 
 ## 测试

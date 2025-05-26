@@ -5,7 +5,7 @@
 import datetime
 import json
 from typing import List, Dict, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -22,6 +22,7 @@ class EmailRecord:
     is_deleted: bool = False
     is_spam: bool = False
     spam_score: float = 0.0
+    matched_keywords: List[str] = field(default_factory=list)
     content_path: Optional[str] = None
 
     @classmethod

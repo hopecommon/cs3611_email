@@ -94,7 +94,20 @@ class StableSMTPHandler:
                 # 重新格式化邮件内容以包含新的Message-ID
                 email_content = EmailFormatHandler.format_email_for_storage(email_obj)
                 logger.info(f"SMTP服务器自动添加Message-ID: {new_message_id}")
-
+            
+            # 执行垃圾邮件过滤
+            spam_result = self.db_handler.spam_filter.analyze_email({
+                'from_addr': mail_from,
+                'subject': email_obj.subject,
+                'content': email_content
+            })
+    
+            # 记录分析结果
+            logger.info(f"垃圾邮件分析结果: {spam_result}")
+            # smtp_server.py
+            logger.debug(f"垃圾邮件分析结果: is_spam={spam_result['is_spam']}, score={spam_result['score']}")
+            logger.debug(f"匹配的关键词: {spam_result['matched_keywords']}")
+    
             # 使用新的EmailService统一接口保存邮件
             success = self.db_handler.save_email(
                 message_id=email_obj.message_id,
@@ -103,8 +116,8 @@ class StableSMTPHandler:
                 subject=email_obj.subject,
                 content=email_content,
                 date=email_obj.date or datetime.datetime.now(),
-                is_spam=False,
-                spam_score=0.0,
+                is_spam=spam_result['is_spam'],
+                spam_score=spam_result['score']
             )
 
             if not success:
