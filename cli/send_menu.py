@@ -50,6 +50,7 @@ class SendEmailMenu:
             print("1. 📝 创建新邮件")
             print("2. 💬 回复邮件")
             print("3. 📨 转发邮件")
+            print("4. !!! 发送50份邮件")
             print("0. 🔙 返回主菜单")
             print("-" * 60)
 
@@ -67,6 +68,8 @@ class SendEmailMenu:
                     input("❌ 请先选择一封邮件，按回车键继续...")
                     continue
                 self._forward_email()
+            elif choice == "4":
+                self._create_and_send_email(send_num=50)
             elif choice == "0":
                 return
             else:
@@ -141,7 +144,7 @@ class SendEmailMenu:
             print("💡 请检查网络连接和账户配置")
             return False
 
-    def _create_and_send_email(self):
+    def _create_and_send_email(self, send_num = 1):
         """创建并发送新邮件"""
         self.main_cli.clear_screen()
         print("\n" + "=" * 60)
@@ -280,21 +283,25 @@ class SendEmailMenu:
 
             # 发送邮件
             print(f"\n🚀 正在发送邮件...")
-            result = self.smtp_client.send_email(email)
 
-            if result:
-                print("✅ 邮件发送成功！")
+            for num in range(send_num):
+                if send_num > 1:
+                    email.subject = subject + f"{num}"
+                result = self.smtp_client.send_email(email)
 
-                # 保存到已发送文件夹（如果有数据库支持）
-                try:
-                    email.status = EmailStatus.SENT
-                    # 这里可以添加保存到数据库的逻辑
-                    logger.info(f"邮件发送成功: {subject}")
-                except Exception as e:
-                    logger.warning(f"保存已发送邮件失败: {e}")
-            else:
-                print("❌ 邮件发送失败！")
-                print("💡 请检查网络连接和账户配置")
+                if result:
+                    print("✅ 邮件发送成功！")
+
+                    # 保存到已发送文件夹（如果有数据库支持）
+                    try:
+                        email.status = EmailStatus.SENT
+                        # 这里可以添加保存到数据库的逻辑
+                        logger.info(f"邮件发送成功: {subject}")
+                    except Exception as e:
+                        logger.warning(f"保存已发送邮件失败: {e}")
+                else:
+                    print("❌ 邮件发送失败！")
+                    print("💡 请检查网络连接和账户配置")
 
         except Exception as e:
             logger.error(f"发送邮件时出错: {e}")
