@@ -53,8 +53,9 @@
               <div class="col-md-6 text-md-end">
                 <p class="mb-1">
                   <strong>发送时间:</strong>
-                  {% if email.date %} {{ email.date.strftime('%Y-%m-%d
-                  %H:%M:%S') }} {% else %} 未知 {% endif %}
+                  {% if email.date %} {% if email.date.strftime %} {{
+                  email.date.strftime('%Y-%m-%d %H:%M:%S') }} {% else %} {{
+                  email.date }} {% endif %} {% else %} 未知 {% endif %}
                 </p>
                 <p class="mb-1">
                   <strong>大小:</strong> {{ (email.size / 1024)|round(2) }} KB

@@ -1,29 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-用户管理工具 - 管理Web应用用户账户
+用户管理工具 - 用于创建、删除和管理用户账户
 """
 
-import sys
 import sqlite3
 import hashlib
-import secrets
 import uuid
 from pathlib import Path
-from datetime import datetime
+import os
+import getpass
+
+# 导入统一配置
+from common.config import DB_PATH as MAIN_DB_PATH
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sys
 
-from server.user_auth import UserAuth
+project_root = Path(__file__).resolve().parent
+sys.path.insert(0, str(project_root))
+
+try:
+    from server.user_auth import UserAuth
+except ImportError:
+    print("⚠️  无法导入UserAuth，某些功能可能不可用")
+    UserAuth = None
 
 
 class UserManager:
     """用户管理工具"""
 
-    def __init__(self, db_path="data/emails_dev.db"):
+    def __init__(self, db_path=None):
         """初始化用户管理器"""
-        self.db_path = str(Path(__file__).resolve().parent / db_path)
+        # 使用统一配置中的数据库路径，除非明确指定
+        if db_path is None:
+            self.db_path = MAIN_DB_PATH
+        else:
+            self.db_path = str(Path(__file__).resolve().parent / db_path)
+
         print(f"📁 使用数据库: {self.db_path}")
 
     def _hash_password(self, password, salt=None):

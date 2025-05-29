@@ -58,8 +58,9 @@
               </div>
               <div class="col-md-2 text-end">
                 <small class="text-muted">
-                  {% if email.date %} {{ email.date.strftime('%m-%d %H:%M') }}
-                  {% endif %}
+                  {% if email.date %} {% if email.date.strftime %} {{
+                  email.date.strftime('%m-%d %H:%M') }} {% else %} {{ email.date
+                  }} {% endif %} {% endif %}
                 </small>
               </div>
             </div>

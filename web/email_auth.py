@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-邮箱认证系统 - 直接使用邮箱和授权码进行认证
+邮箱认证系统 - 支持第三方邮箱登录
 """
 
 import smtplib
@@ -34,14 +34,57 @@ except ImportError:
     get_provider_config = email_providers_config.get_provider_config
     is_supported_provider = email_providers_config.is_supported_provider
 
+# 导入统一配置
+from common.config import DB_PATH as MAIN_DB_PATH
+
+# 支持的邮箱服务商配置
+EMAIL_PROVIDERS = {
+    "qq.com": {
+        "name": "QQ邮箱",
+        "smtp": {"host": "smtp.qq.com", "port": 587, "use_tls": True},
+        "pop3": {"host": "pop.qq.com", "port": 995, "use_ssl": True},
+    },
+    "163.com": {
+        "name": "网易163邮箱",
+        "smtp": {"host": "smtp.163.com", "port": 994, "use_ssl": True},
+        "pop3": {"host": "pop.163.com", "port": 995, "use_ssl": True},
+    },
+    "126.com": {
+        "name": "网易126邮箱",
+        "smtp": {"host": "smtp.126.com", "port": 994, "use_ssl": True},
+        "pop3": {"host": "pop.126.com", "port": 995, "use_ssl": True},
+    },
+    "gmail.com": {
+        "name": "Gmail",
+        "smtp": {"host": "smtp.gmail.com", "port": 587, "use_tls": True},
+        "pop3": {"host": "pop.gmail.com", "port": 995, "use_ssl": True},
+    },
+    "outlook.com": {
+        "name": "Outlook",
+        "smtp": {"host": "smtp-mail.outlook.com", "port": 587, "use_tls": True},
+        "pop3": {"host": "outlook.office365.com", "port": 995, "use_ssl": True},
+    },
+    "hotmail.com": {
+        "name": "Hotmail",
+        "smtp": {"host": "smtp-mail.outlook.com", "port": 587, "use_tls": True},
+        "pop3": {"host": "outlook.office365.com", "port": 995, "use_ssl": True},
+    },
+}
+
+
+def get_provider_config(email: str) -> Optional[Dict]:
+    """根据邮箱地址获取服务商配置"""
+    domain = email.split("@")[-1].lower()
+    return EMAIL_PROVIDERS.get(domain)
+
 
 class EmailUser(UserMixin):
-    """邮箱用户类 - 用于Flask-Login"""
+    """邮箱用户类，用于Flask-Login"""
 
     def __init__(self, email: str, config: Dict[str, Any]):
         self.email = email
         self.config = config
-        self.provider_name = config.get("provider_name", "未知")
+        self.provider_name = config.get("provider_name", "未知邮箱")
         self.last_login = datetime.now()
         self.needs_reauth = config.get("needs_reauth", False)  # 是否需要重新认证
 
@@ -63,8 +106,11 @@ class EmailUser(UserMixin):
         self.pop3_use_ssl = pop3_config.get("use_ssl", True)
         self.pop3_username = email
 
+    def __repr__(self):
+        return f"<EmailUser {self.email}>"
+
     def get_id(self):
-        """返回用户ID"""
+        """返回用户唯一标识 - Flask-Login要求的方法"""
         return self.email
 
     @property
@@ -98,9 +144,15 @@ class EmailUser(UserMixin):
 class EmailAuthenticator:
     """邮箱认证器"""
 
-    def __init__(self, db_path: str = "data/emails_dev.db"):
+    def __init__(self, db_path: str = None):
         """初始化认证器"""
-        self.db_path = db_path
+        # 使用统一配置中的数据库路径，除非明确指定
+        if db_path is None:
+            self.db_path = MAIN_DB_PATH
+        else:
+            self.db_path = db_path
+
+        print(f"📊 邮箱认证系统使用数据库: {self.db_path}")
         self._init_db()
 
     def _init_db(self):
@@ -211,37 +263,27 @@ class EmailAuthenticator:
             return False
 
     def _save_email_account(self, email: str, password: str, provider_config: Dict):
-        """保存邮箱账户配置"""
+        """保存邮箱账户配置（只保存邮箱地址和配置，不保存密码）"""
         try:
-            from cryptography.fernet import Fernet
-            import base64
-
-            # 生成一个密钥（实际应用中应该使用更安全的密钥管理）
-            # 这里使用邮箱地址的哈希作为密钥种子
-            key_seed = hashlib.sha256(email.encode()).hexdigest()[:32]
-            key = base64.urlsafe_b64encode(key_seed.encode().ljust(32, b"0")[:32])
-            fernet = Fernet(key)
-
-            # 加密密码
-            encrypted_password = fernet.encrypt(password.encode()).decode()
+            import json
 
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            # 保存或更新邮箱配置（修改字段名以区分新的加密方式）
+            # 只保存邮箱配置，不保存密码（为了安全和用户体验）
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO email_accounts 
+                INSERT OR REPLACE INTO email_accounts
                 (email, provider_name, encrypted_password, salt, smtp_config, pop3_config, last_login, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     email,
                     provider_config["name"],
-                    encrypted_password,
-                    "fernet_encrypted",  # 标记使用新的加密方式
-                    str(provider_config["smtp"]),
-                    str(provider_config["pop3"]),
+                    "",  # 不保存密码
+                    "no_password_saved",  # 标记不保存密码
+                    json.dumps(provider_config["smtp"]),  # 使用JSON格式
+                    json.dumps(provider_config["pop3"]),  # 使用JSON格式
                     datetime.now().isoformat(),
                     datetime.now().isoformat(),
                 ),
@@ -249,38 +291,13 @@ class EmailAuthenticator:
 
             conn.commit()
             conn.close()
-            print(f"✅ 邮箱配置已保存: {email}")
+            print(f"✅ 邮箱配置已保存（不含密码）: {email}")
 
         except Exception as e:
             print(f"❌ 保存邮箱配置失败: {e}")
-            # 如果加密失败，回退到简单方式
-            salt = uuid.uuid4().hex
-            encrypted_password = hashlib.sha256((password + salt).encode()).hexdigest()
+            import traceback
 
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                INSERT OR REPLACE INTO email_accounts 
-                (email, provider_name, encrypted_password, salt, smtp_config, pop3_config, last_login, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    email,
-                    provider_config["name"],
-                    encrypted_password,
-                    salt,
-                    str(provider_config["smtp"]),
-                    str(provider_config["pop3"]),
-                    datetime.now().isoformat(),
-                    datetime.now().isoformat(),
-                ),
-            )
-
-            conn.commit()
-            conn.close()
-            print(f"✅ 邮箱配置已保存（使用哈希）: {email}")
+            traceback.print_exc()
 
     def _decrypt_password(
         self, email: str, encrypted_password: str, salt: str
@@ -296,13 +313,9 @@ class EmailAuthenticator:
                 key = base64.urlsafe_b64encode(key_seed.encode().ljust(32, b"0")[:32])
                 fernet = Fernet(key)
 
-                decrypted_password = fernet.decrypt(
-                    encrypted_password.encode()
-                ).decode()
-                return decrypted_password
+                return fernet.decrypt(encrypted_password.encode()).decode()
             else:
-                # 旧的哈希方式，无法解密
-                print(f"⚠️  旧的哈希加密方式，无法解密密码: {email}")
+                # 旧的哈希方式无法解密，返回None
                 return None
 
         except Exception as e:
@@ -312,27 +325,53 @@ class EmailAuthenticator:
     def get_saved_account(self, email: str) -> Optional[Dict]:
         """获取已保存的邮箱账户"""
         try:
+            import json
+
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
             cursor.execute(
                 """
-                SELECT email, provider_name, last_login 
-                FROM email_accounts 
-                WHERE email = ?
+                SELECT provider_name, smtp_config, pop3_config
+                FROM email_accounts WHERE email = ?
             """,
                 (email,),
             )
 
-            row = cursor.fetchone()
+            result = cursor.fetchone()
             conn.close()
 
-            if row:
-                return {"email": row[0], "provider_name": row[1], "last_login": row[2]}
-            return None
+            if not result:
+                return None
+
+            provider_name, smtp_config, pop3_config = result
+
+            try:
+                # 尝试JSON解析
+                smtp_config_dict = json.loads(smtp_config)
+                pop3_config_dict = json.loads(pop3_config)
+            except json.JSONDecodeError:
+                # 如果JSON解析失败，尝试eval（向后兼容）
+                try:
+                    smtp_config_dict = eval(smtp_config)
+                    pop3_config_dict = eval(pop3_config)
+                except Exception as eval_e:
+                    print(f"❌ 配置解析失败: {eval_e}")
+                    return None
+
+            return {
+                "email": email,
+                "provider_name": provider_name,
+                "smtp_config": smtp_config_dict,
+                "pop3_config": pop3_config_dict,
+                # 不返回密码，需要用户重新输入
+            }
 
         except Exception as e:
-            print(f"❌ 获取邮箱账户失败: {e}")
+            print(f"❌ 获取保存的账户失败: {e}")
+            import traceback
+
+            traceback.print_exc()
             return None
 
     def list_saved_accounts(self) -> list:
@@ -343,112 +382,92 @@ class EmailAuthenticator:
 
             cursor.execute(
                 """
-                SELECT email, provider_name, last_login 
-                FROM email_accounts 
+                SELECT email, provider_name, last_login
+                FROM email_accounts
                 ORDER BY last_login DESC
             """
             )
 
-            accounts = []
-            for row in cursor.fetchall():
-                accounts.append(
-                    {"email": row[0], "provider_name": row[1], "last_login": row[2]}
-                )
-
+            results = cursor.fetchall()
             conn.close()
-            return accounts
+
+            return [
+                {"email": email, "provider_name": provider, "last_login": last_login}
+                for email, provider, last_login in results
+            ]
 
         except Exception as e:
-            print(f"❌ 获取邮箱账户列表失败: {e}")
+            print(f"❌ 获取账户列表失败: {e}")
             return []
 
 
 # 用于Flask-Login的用户加载器
 def load_user_by_email(email: str) -> Optional[EmailUser]:
-    """通过邮箱加载用户"""
+    """通过邮箱加载用户（仅用于会话恢复，不包含密码）"""
     try:
-        provider_config = get_provider_config(email)
-        if not provider_config:
-            return None
-
         authenticator = EmailAuthenticator()
-        saved_account = authenticator.get_saved_account(email)
-        if not saved_account:
-            return None
+        account_info = authenticator.get_saved_account(email)
 
-        # 从数据库获取加密的密码
-        try:
-            conn = sqlite3.connect(authenticator.db_path)
-            cursor = conn.cursor()
-
-            cursor.execute(
-                """
-                SELECT encrypted_password, salt 
-                FROM email_accounts 
-                WHERE email = ?
-            """,
-                (email,),
-            )
-
-            row = cursor.fetchone()
-            conn.close()
-
-            if not row:
-                print(f"❌ 未找到邮箱账户的密码信息: {email}")
-                return None
-
-            encrypted_password, salt = row
-
-            # 解密密码
-            decrypted_password = authenticator._decrypt_password(
-                email, encrypted_password, salt
-            )
-
-            if decrypted_password:
-                # 新的加密方式，包含密码
-                user_config = {
-                    "provider_name": provider_config["name"],
-                    "smtp": {
-                        **provider_config["smtp"],
-                        "username": email,
-                        "password": decrypted_password,
-                    },
-                    "pop3": {
-                        **provider_config["pop3"],
-                        "username": email,
-                        "password": decrypted_password,
-                    },
-                }
-
-                return EmailUser(email, user_config)
-            else:
-                # 旧的哈希加密方式，创建一个需要重新认证的用户对象
-                print(f"⚠️  旧的哈希加密账户，需要重新登录: {email}")
-                user_config = {
-                    "provider_name": provider_config["name"],
-                    "smtp": {**provider_config["smtp"], "username": email},
-                    "pop3": {**provider_config["pop3"], "username": email},
-                    "needs_reauth": True,  # 标记需要重新认证
-                }
-
-                return EmailUser(email, user_config)
-
-        except Exception as e:
-            print(f"❌ 获取密码信息失败: {e}")
-
-            # 创建基本的用户配置（不包含密码）
+        if account_info:
+            # 构建用户配置（不包含密码）
             user_config = {
-                "provider_name": provider_config["name"],
-                "smtp": provider_config["smtp"],
-                "pop3": provider_config["pop3"],
+                "provider_name": account_info["provider_name"],
+                "smtp": {
+                    **account_info["smtp_config"],
+                    "username": email,
+                    # 密码需要重新输入
+                },
+                "pop3": {
+                    **account_info["pop3_config"],
+                    "username": email,
+                    # 密码需要重新输入
+                },
                 "needs_reauth": True,  # 标记需要重新认证
             }
 
             return EmailUser(email, user_config)
 
-    except Exception as e:
-        print(f"❌ 加载用户失败: {e}")
         return None
+
+    except Exception as e:
+        print(f"❌ 加载邮箱用户失败: {e}")
+        return None
+
+
+# 创建全局认证器实例
+email_authenticator = EmailAuthenticator()
+
+
+def authenticate_email_user(email: str, password: str) -> Optional[EmailUser]:
+    """
+    认证邮箱用户（全局函数接口）
+
+    Args:
+        email: 邮箱地址
+        password: 密码/授权码
+
+    Returns:
+        成功返回EmailUser，失败返回None
+    """
+    return email_authenticator.authenticate(email, password)
+
+
+def get_email_user(email: str) -> Optional[EmailUser]:
+    """
+    获取已保存的邮箱用户（全局函数接口）
+
+    Args:
+        email: 邮箱地址
+
+    Returns:
+        如果有保存的配置返回EmailUser，否则返回None
+    """
+    return load_user_by_email(email)
+
+
+def list_email_accounts() -> list:
+    """列出所有保存的邮箱账户"""
+    return email_authenticator.list_saved_accounts()
 
 
 if __name__ == "__main__":

@@ -6,6 +6,12 @@ import os
 import secrets
 from pathlib import Path
 
+# 导入统一配置
+from common.config import (
+    DB_PATH as MAIN_DB_PATH,
+    EMAIL_STORAGE_DIR as MAIN_EMAIL_STORAGE_DIR,
+)
+
 
 class Config:
     """基础配置类"""
@@ -17,8 +23,8 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
     # 数据库配置 - 使用项目现有的数据库
-    DB_PATH = os.path.join(BASE_DIR, "data", "emails.db.sqlite")
-    EMAIL_STORAGE_DIR = os.path.join(BASE_DIR, "data", "emails")
+    DB_PATH = MAIN_DB_PATH  # 使用统一配置中的数据库路径
+    EMAIL_STORAGE_DIR = MAIN_EMAIL_STORAGE_DIR  # 使用统一配置中的邮件存储目录
 
     # 上传文件配置
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "data", "uploads")
@@ -59,8 +65,8 @@ class DevelopmentConfig(Config):
     DEBUG = True
     DEVELOPMENT = True
 
-    # 开发环境数据库
-    DB_PATH = os.path.join(Config.BASE_DIR, "data", "emails_dev.db")
+    # 继承基础配置的数据库路径，不再硬编码
+    # DB_PATH = 已经从Config继承
 
     # 开发环境日志
     LOG_LEVEL = "DEBUG"
@@ -72,7 +78,7 @@ class TestingConfig(Config):
     TESTING = True
     WTF_CSRF_ENABLED = False
 
-    # 测试环境数据库
+    # 测试环境数据库 - 如果需要专门的测试数据库可以覆盖
     DB_PATH = os.path.join(Config.BASE_DIR, "data", "emails_test.db")
 
     # 测试环境日志

@@ -16,11 +16,15 @@ import os
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
+# 导入统一配置
+from common.config import DB_PATH, EMAIL_STORAGE_DIR
+
 # 导入蓝图
 from web.routes.auth import auth_bp
 from web.routes.main import main_bp
 from web.routes.email import email_bp
 from web.routes.mail_config import mail_config_bp
+from web.routes.cli_api import cli_api_bp
 
 # 导入模型
 from web.models import WebUser
@@ -44,7 +48,7 @@ def create_app(config_name="development"):
     """Flask应用工厂函数"""
     app = Flask(__name__)
 
-    # 配置
+    # 配置 - 使用统一的数据库配置
     app.config.update(
         {
             "SECRET_KEY": "cs3611-email-web-secret-key-2024",
@@ -52,9 +56,12 @@ def create_app(config_name="development"):
             "WTF_CSRF_TIME_LIMIT": 3600,
             "UPLOAD_FOLDER": str(project_root / "data" / "uploads"),
             "MAX_CONTENT_LENGTH": 16 * 1024 * 1024,  # 16MB
-            "DB_PATH": str(project_root / "data" / "emails_dev.db"),
+            "DB_PATH": DB_PATH,  # 使用统一配置中的数据库路径
+            "EMAIL_STORAGE_DIR": EMAIL_STORAGE_DIR,  # 使用统一配置中的邮件存储目录
         }
     )
+
+    print(f"📊 Web应用使用数据库: {app.config['DB_PATH']}")
 
     # 确保上传目录存在
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -154,5 +161,6 @@ def create_app(config_name="development"):
     app.register_blueprint(main_bp)
     app.register_blueprint(email_bp, url_prefix="/email")
     app.register_blueprint(mail_config_bp, url_prefix="/mail_config")
+    app.register_blueprint(cli_api_bp, url_prefix="/api/cli")
 
     return app

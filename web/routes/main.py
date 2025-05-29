@@ -35,28 +35,54 @@ def dashboard():
         if hasattr(current_user, "email"):
             # 邮箱用户
             print(f"📧 邮箱用户: {current_user.email}")
+
+            # 安全处理登录时间
+            login_time = "未知"
+            if hasattr(current_user, "last_login") and current_user.last_login:
+                try:
+                    if hasattr(current_user.last_login, "strftime"):
+                        # 如果是datetime对象
+                        login_time = current_user.last_login.strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    else:
+                        # 如果是字符串，直接使用
+                        login_time = str(current_user.last_login)
+                except Exception as e:
+                    print(f"⚠️  处理登录时间失败: {e}")
+                    login_time = "未知"
+
             user_info = {
                 "email": current_user.email,
                 "provider": getattr(current_user, "provider_name", "未知"),
-                "login_time": (
-                    current_user.last_login.strftime("%Y-%m-%d %H:%M:%S")
-                    if hasattr(current_user, "last_login") and current_user.last_login
-                    else "未知"
-                ),
+                "login_time": login_time,
             }
         else:
             # 传统Web用户
             print(f"👤 Web用户: {current_user.username}")
+
+            # 安全处理登录时间
+            login_time = "未知"
+            if hasattr(current_user, "last_login") and current_user.last_login:
+                try:
+                    if hasattr(current_user.last_login, "strftime"):
+                        # 如果是datetime对象
+                        login_time = current_user.last_login.strftime(
+                            "%Y-%m-%d %H:%M:%S"
+                        )
+                    else:
+                        # 如果是字符串，直接使用
+                        login_time = str(current_user.last_login)
+                except Exception as e:
+                    print(f"⚠️  处理登录时间失败: {e}")
+                    login_time = "未知"
+
             user_info = {
                 "email": getattr(
                     current_user, "email", current_user.username + "@example.com"
                 ),
                 "provider": "Web账户",
-                "login_time": (
-                    current_user.last_login.strftime("%Y-%m-%d %H:%M:%S")
-                    if hasattr(current_user, "last_login") and current_user.last_login
-                    else "未知"
-                ),
+                "login_time": login_time,
             }
 
         print(f"ℹ️  用户信息: {user_info}")

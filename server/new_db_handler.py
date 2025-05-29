@@ -187,8 +187,91 @@ class EmailService:
 
             # 如果需要，获取邮件内容
             if include_content:
-                content = self.content_manager.get_content(message_id, email_dict)
-                email_dict["content"] = content
+                full_eml_content = self.content_manager.get_content(
+                    message_id, email_dict
+                )
+                if full_eml_content:
+                    try:
+                        from common.email_format_handler import EmailFormatHandler
+
+                        # 解析邮件内容，提取纯文本或HTML正文
+                        parsed_email_obj = EmailFormatHandler.parse_mime_message(
+                            full_eml_content
+                        )
+                        # 优先使用 html_content，其次 text_content
+                        email_dict["content"] = (
+                            parsed_email_obj.html_content
+                            or parsed_email_obj.text_content
+                            or ""
+                        )
+
+                        # 添加附件信息
+                        if parsed_email_obj.attachments:
+                            email_dict["has_attachments"] = True
+                            email_dict["attachments"] = []
+                            for attachment in parsed_email_obj.attachments:
+                                # 计算附件大小
+                                attachment_size = 0
+                                if (
+                                    hasattr(attachment, "content")
+                                    and attachment.content
+                                ):
+                                    attachment_size = len(attachment.content)
+                                elif hasattr(attachment, "size") and attachment.size:
+                                    attachment_size = attachment.size
+
+                                email_dict["attachments"].append(
+                                    {
+                                        "filename": attachment.filename,
+                                        "content_type": attachment.content_type,
+                                        "size": attachment_size,
+                                    }
+                                )
+                        else:
+                            email_dict["has_attachments"] = False
+                            email_dict["attachments"] = []
+
+                    except Exception as e:
+                        logger.error(f"解析接收邮件内容失败 for {message_id}: {e}")
+                        # 解析失败时尝试简单提取文本内容
+                        try:
+                            import email
+
+                            msg = email.message_from_string(full_eml_content)
+
+                            # 尝试提取纯文本内容
+                            simple_content = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        payload = part.get_payload(decode=True)
+                                        if payload:
+                                            simple_content = payload.decode(
+                                                part.get_content_charset() or "utf-8",
+                                                errors="ignore",
+                                            )
+                                            break
+                            else:
+                                if msg.get_content_type() == "text/plain":
+                                    payload = msg.get_payload(decode=True)
+                                    if payload:
+                                        simple_content = payload.decode(
+                                            msg.get_content_charset() or "utf-8",
+                                            errors="ignore",
+                                        )
+
+                            email_dict["content"] = simple_content or "邮件内容解析失败"
+
+                        except Exception as simple_e:
+                            logger.error(f"简单解析也失败 for {message_id}: {simple_e}")
+                            email_dict["content"] = "邮件内容解析失败，请联系管理员"
+
+                        email_dict["has_attachments"] = False
+                        email_dict["attachments"] = []
+                else:
+                    email_dict["content"] = ""
+                    email_dict["has_attachments"] = False
+                    email_dict["attachments"] = []
 
             return email_dict
         except Exception as e:
@@ -455,9 +538,38 @@ class EmailService:
                         )
                     except Exception as e:
                         logger.error(f"解析已发送邮件内容失败 for {message_id}: {e}")
-                        sent_dict["content"] = (
-                            full_eml_content  # 解析失败则返回原始内容
-                        )
+                        # 解析失败时尝试简单提取文本内容
+                        try:
+                            import email
+
+                            msg = email.message_from_string(full_eml_content)
+
+                            # 尝试提取纯文本内容
+                            simple_content = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        payload = part.get_payload(decode=True)
+                                        if payload:
+                                            simple_content = payload.decode(
+                                                part.get_content_charset() or "utf-8",
+                                                errors="ignore",
+                                            )
+                                            break
+                            else:
+                                if msg.get_content_type() == "text/plain":
+                                    payload = msg.get_payload(decode=True)
+                                    if payload:
+                                        simple_content = payload.decode(
+                                            msg.get_content_charset() or "utf-8",
+                                            errors="ignore",
+                                        )
+
+                            sent_dict["content"] = simple_content or "邮件内容解析失败"
+
+                        except Exception as simple_e:
+                            logger.error(f"简单解析也失败 for {message_id}: {simple_e}")
+                            sent_dict["content"] = "邮件内容解析失败，请联系管理员"
                 else:
                     sent_dict["content"] = ""
             else:

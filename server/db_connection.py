@@ -133,7 +133,10 @@ class DatabaseConnection:
                     is_deleted INTEGER DEFAULT 0,
                     is_spam INTEGER DEFAULT 0,
                     spam_score REAL DEFAULT 0.0,
-                    content_path TEXT
+                    content_path TEXT,
+                    is_recalled INTEGER DEFAULT 0,
+                    recalled_at TEXT,
+                    recalled_by TEXT
                 )
             """
             )
@@ -153,7 +156,12 @@ class DatabaseConnection:
                     has_attachments INTEGER DEFAULT 0,
                     content_path TEXT,
                     status TEXT,
-                    is_read INTEGER DEFAULT 0
+                    is_read INTEGER DEFAULT 0,
+                    is_spam INTEGER DEFAULT 0,
+                    spam_score REAL DEFAULT 0.0,
+                    is_recalled INTEGER DEFAULT 0,
+                    recalled_at TEXT,
+                    recalled_by TEXT
                 )
             """
             )

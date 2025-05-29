@@ -295,6 +295,88 @@ def view_sent(message_id):
         return redirect(url_for("email.sent"))
 
 
+@email_bp.route("/download_attachment/<message_id>/<filename>")
+@login_required
+def download_attachment(message_id, filename):
+    """下载邮件附件"""
+    try:
+        from flask import send_file
+        import os
+        from common.config import EMAIL_STORAGE_DIR
+
+        # 获取邮件内容
+        email_service = g.email_service
+        email = email_service.get_email(message_id, include_content=True)
+
+        if not email:
+            flash("邮件不存在", "error")
+            return redirect(url_for("email.inbox"))
+
+        # 解析邮件获取附件
+        from common.email_format_handler import EmailFormatHandler
+
+        content = email_service.content_manager.get_content(message_id, email)
+
+        if not content:
+            flash("无法获取邮件内容", "error")
+            return redirect(url_for("email.view", message_id=message_id))
+
+        # 解析邮件
+        parsed_email = EmailFormatHandler.parse_mime_message(content)
+
+        # 查找指定的附件
+        target_attachment = None
+        for attachment in parsed_email.attachments:
+            if attachment.filename == filename:
+                target_attachment = attachment
+                break
+
+        if not target_attachment:
+            flash(f"附件 {filename} 不存在", "error")
+            return redirect(url_for("email.view", message_id=message_id))
+
+        # 创建临时文件
+        import tempfile
+        import base64
+
+        temp_dir = tempfile.mkdtemp()
+        temp_file_path = os.path.join(temp_dir, filename)
+
+        # 解码附件内容并保存到临时文件
+        try:
+            # 解码附件数据
+            if hasattr(target_attachment, "content") and target_attachment.content:
+                # 使用content属性
+                if isinstance(target_attachment.content, str):
+                    attachment_data = base64.b64decode(target_attachment.content)
+                else:
+                    attachment_data = target_attachment.content
+            else:
+                flash("附件数据为空", "error")
+                return redirect(url_for("email.view", message_id=message_id))
+
+            with open(temp_file_path, "wb") as f:
+                f.write(attachment_data)
+
+            # 发送文件
+            return send_file(
+                temp_file_path,
+                as_attachment=True,
+                download_name=filename,
+                mimetype=target_attachment.content_type,
+            )
+
+        except Exception as decode_e:
+            print(f"❌ 解码附件失败: {decode_e}")
+            flash(f"附件解码失败: {str(decode_e)}", "error")
+            return redirect(url_for("email.view", message_id=message_id))
+
+    except Exception as e:
+        print(f"❌ 下载附件失败: {e}")
+        flash(f"下载附件失败: {str(e)}", "error")
+        return redirect(url_for("email.inbox"))
+
+
 @email_bp.route("/delete/<message_id>")
 @login_required
 def delete(message_id):
@@ -502,13 +584,14 @@ def _fetch_new_emails():
                     except:
                         pass
 
-                # 保存邮件到数据库
+                # 保存完整的邮件内容（包括原始邮件）
+                raw_email_str = raw_email.decode("utf-8", errors="ignore")
                 success = email_service.save_email(
                     message_id=message_id,
                     from_addr=from_addr,
                     to_addrs=[current_user.email],
                     subject=subject,
-                    content=content,
+                    content=raw_email_str,  # 保存完整的原始邮件
                     date=email_date,
                 )
 
@@ -527,3 +610,48 @@ def _fetch_new_emails():
     except Exception as e:
         print(f"❌ 拉取邮件失败: {e}")
         return {"success": False, "error": str(e)}
+
+
+@email_bp.route("/search")
+@login_required
+def search():
+    """邮件搜索页面"""
+    query = request.args.get("q", "").strip()
+    search_results = []
+
+    if query:
+        try:
+            email_service = g.email_service
+            # 搜索邮件
+            search_results = email_service.search_emails(
+                query=query,
+                search_fields=["subject", "from_addr", "content"],
+                include_sent=True,
+                include_received=True,
+                limit=50,
+            )
+
+            # 转换日期格式
+            for email in search_results:
+                if email.get("date") and isinstance(email["date"], str):
+                    try:
+                        email["date"] = datetime.datetime.fromisoformat(email["date"])
+                    except ValueError:
+                        for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
+                            try:
+                                email["date"] = datetime.datetime.strptime(
+                                    email["date"], fmt
+                                )
+                                break
+                            except ValueError:
+                                continue
+                        else:
+                            current_app.logger.warning(
+                                f"无法解析搜索结果中的日期: {email.get('date')}"
+                            )
+
+        except Exception as e:
+            current_app.logger.error(f"搜索邮件时出错: {e}", exc_info=True)
+            flash(f"搜索时出错: {str(e)}", "error")
+
+    return render_template("email/search.html", query=query, results=search_results)
