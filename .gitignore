@@ -201,3 +201,4 @@ test_attachments/
 documents/
 pgp/
 .cursor/
+test_output/
