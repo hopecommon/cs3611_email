@@ -30,36 +30,60 @@ class EmailContentManager:
         self, message_id: str, content: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Optional[str]:
         """
-        保存邮件内容
+        保存邮件内容，使用统一的EmailFormatHandler
 
         Args:
             message_id: 邮件ID
             content: 邮件内容
-            metadata: 邮件元数据（可选，用于补充缺失的头部）
+            metadata: 邮件元数据（用于补充头部信息）
 
         Returns:
             保存的文件路径，失败返回None
         """
         try:
-            # 如果提供了元数据，确保邮件格式正确
-            if metadata:
-                # 使用元数据补充和修复邮件内容
-                content = self._ensure_proper_email_format_with_metadata(
-                    content, message_id, metadata
-                )
-            else:
-                # 使用统一的格式处理器确保邮件格式正确
-                formatted_content = EmailFormatHandler.ensure_proper_format(content)
+            # 确保存储目录存在
+            os.makedirs(EMAIL_STORAGE_DIR, exist_ok=True)
 
+            # 1. 使用EmailFormatHandler统一处理邮件格式
+            from common.email_format_handler import EmailFormatHandler
+
+            # 如果有元数据，用它来完善邮件内容
+            if metadata:
+                # 先尝试解析现有内容
+                try:
+                    email_obj = EmailFormatHandler.parse_email_content(content)
+                    # 用元数据补充缺失的字段
+                    if metadata.get("from_addr") and (
+                        not email_obj.from_addr
+                        or email_obj.from_addr.address in ["unknown@localhost", ""]
+                    ):
+                        from common.models import EmailAddress
+
+                        email_obj.from_addr = EmailAddress("", metadata["from_addr"])
+                    if metadata.get("subject") and not email_obj.subject:
+                        email_obj.subject = metadata["subject"]
+                    if metadata.get("message_id") and not email_obj.message_id:
+                        email_obj.message_id = metadata["message_id"]
+
+                    # 重新格式化内容
+                    content = EmailFormatHandler.format_email_for_storage(email_obj)
+                except Exception as e:
+                    logger.warning(f"解析邮件失败，使用原始内容: {e}")
+                    # 如果解析失败，确保格式正确
+                    content = EmailFormatHandler.ensure_proper_format(content, metadata)
+            else:
+                # 没有元数据，直接确保格式正确
+                content = EmailFormatHandler.ensure_proper_format(content)
+
+            # 2. 生成安全的文件名
             safe_filename = self._generate_safe_filename(message_id)
             filepath = os.path.join(EMAIL_STORAGE_DIR, f"{safe_filename}.eml")
 
-            # 检查文件是否已存在
+            # 3. 如果文件已存在，可能需要覆盖或跳过
             if os.path.exists(filepath):
-                logger.info(f"邮件文件已存在，跳过保存: {filepath}")
-                return filepath
+                logger.debug(f"邮件文件已存在，将覆盖: {filepath}")
 
-            # 保存格式化后的内容
+            # 4. 保存内容
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(content)
 

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 稳定的POP3服务器 - 专门解决连接稳定性问题
+增强Windows兼容性和错误恢复机制
 """
 
 import os
@@ -16,7 +17,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from common.utils import setup_logging
-from common.config import SSL_CERT_FILE, SSL_KEY_FILE
+from common.config import (
+    SSL_CERT_FILE,
+    SSL_KEY_FILE,
+    MAX_CONNECTIONS,
+    POP3_REQUEST_QUEUE_SIZE,
+)
 from server.new_db_handler import EmailService
 from server.user_auth import UserAuth
 
@@ -25,7 +31,7 @@ logger = setup_logging("stable_pop3_server")
 
 
 class StablePOP3Handler(socketserver.StreamRequestHandler):
-    """稳定的POP3处理器"""
+    """稳定的POP3处理器 - 增强Windows兼容性"""
 
     def __init__(self, request, client_address, server):
         self.email_service = server.email_service  # 改用email_service
@@ -35,72 +41,126 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
         # 邮件列表缓存
         self.cached_emails = None
         self.cache_user_email = None
+        # 添加连接统计
+        self.connection_start_time = time.time()
+        self.connection_active = True
+        # Windows兼容性增强
+        self.last_activity = time.time()
         super().__init__(request, client_address, server)
 
     def setup(self):
-        """设置连接"""
-        super().setup()
-        if (
-            self.use_ssl
-            and hasattr(self.server, "ssl_context")
-            and self.server.ssl_context
-        ):
-            try:
-                # 设置socket超时，避免无限等待
-                self.request.settimeout(30)
+        """设置连接 - 增强Windows兼容性"""
+        try:
+            super().setup()
 
-                # 包装SSL套接字
-                self.request = self.server.ssl_context.wrap_socket(
-                    self.request,
-                    server_side=True,
-                    do_handshake_on_connect=False,  # 手动控制握手
-                )
+            # 设置socket选项以提高Windows兼容性
+            if hasattr(self.request, "setsockopt"):
+                # 设置TCP_NODELAY以减少延迟
+                self.request.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+                # 设置SO_KEEPALIVE以检测断开的连接
+                self.request.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                # Windows特定的keepalive设置
+                if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+                    try:
+                        # 启用keepalive，30秒间隔，3次重试
+                        keepalive_vals = (1, 30000, 5000)  # 启用, 30秒, 5秒间隔
+                        self.request.ioctl(socket.SIO_KEEPALIVE_VALS, keepalive_vals)
+                    except:
+                        pass
 
-                # 执行SSL握手
-                self.request.do_handshake()
-
-                # 重新创建文件对象以确保SSL正常工作
-                self.rfile = self.request.makefile("rb", -1)
-                self.wfile = self.request.makefile("wb", 0)
-
-                logger.debug(f"SSL连接已建立: {self.client_address}")
-            except ssl.SSLError as e:
-                logger.warning(f"SSL握手失败，客户端可能不支持SSL: {e}")
-                # 关闭连接，让客户端重新以非SSL方式连接
+            if (
+                self.use_ssl
+                and hasattr(self.server, "ssl_context")
+                and self.server.ssl_context
+            ):
                 try:
-                    self.request.close()
-                except:
-                    pass
-                raise
-            except Exception as e:
-                logger.error(f"SSL连接设置失败: {e}")
-                import traceback
+                    # 设置socket超时，避免无限等待
+                    self.request.settimeout(30)
 
-                logger.error(f"SSL握手详细错误: {traceback.format_exc()}")
-                try:
-                    self.request.close()
-                except:
-                    pass
-                raise
+                    # 包装SSL套接字
+                    self.request = self.server.ssl_context.wrap_socket(
+                        self.request,
+                        server_side=True,
+                        do_handshake_on_connect=False,  # 手动控制握手
+                    )
+
+                    # 执行SSL握手
+                    self.request.do_handshake()
+
+                    # 重新创建文件对象以确保SSL正常工作
+                    self.rfile = self.request.makefile("rb", -1)
+                    self.wfile = self.request.makefile("wb", 0)
+
+                    logger.debug(f"SSL连接已建立: {self.client_address}")
+                except ssl.SSLError as e:
+                    logger.warning(f"SSL握手失败，客户端可能不支持SSL: {e}")
+                    # 关闭连接，让客户端重新以非SSL方式连接
+                    self._safe_close_connection()
+                    raise
+                except Exception as e:
+                    logger.error(f"SSL连接设置失败: {e}")
+                    import traceback
+
+                    logger.error(f"SSL握手详细错误: {traceback.format_exc()}")
+                    self._safe_close_connection()
+                    raise
+        except Exception as e:
+            logger.debug(f"连接setup失败 (可能是客户端提前断开): {e}")
+            self.connection_active = False
+            raise
+
+    def _safe_close_connection(self):
+        """安全关闭连接"""
+        try:
+            if hasattr(self.request, "close"):
+                self.request.close()
+        except:
+            pass
+
+    def _is_connection_alive(self):
+        """检查连接是否仍然活跃"""
+        if not self.connection_active:
+            return False
+
+        try:
+            # 检查socket状态
+            if hasattr(self.request, "fileno"):
+                import select
+
+                ready, _, _ = select.select([], [self.request], [], 0)
+                return len(ready) > 0 or (time.time() - self.last_activity) < 60
+            return True
+        except:
+            return False
 
     def handle(self):
-        """处理POP3连接"""
+        """处理POP3连接 - 增强错误恢复"""
+        connection_id = f"{self.client_address[0]}:{self.client_address[1]}"
+
+        # 检查连接是否在setup阶段就失败了
+        if not self.connection_active:
+            logger.debug(f"连接在setup阶段失败，跳过处理: {connection_id}")
+            return
+
         try:
-            logger.info(f"新的POP3连接: {self.client_address}")
+            logger.info(f"新的POP3连接: {connection_id}")
 
             # 发送欢迎消息
-            self.send_response("+OK POP3 server ready")
+            if not self._safe_send_response("+OK POP3 server ready"):
+                return
 
-            while True:
+            while self.connection_active and self._is_connection_alive():
                 try:
+                    # 设置读取超时，避免长时间阻塞
+                    self.request.settimeout(30)
+
                     # 读取命令
-                    line = (
-                        self.rfile.readline().decode("utf-8", errors="replace").strip()
-                    )
-                    if not line:
+                    line = self._safe_read_line()
+                    if line is None:
                         break
 
-                    logger.debug(f"收到命令: {line}")
+                    self.last_activity = time.time()
+                    logger.debug(f"收到命令: {line} from {connection_id}")
 
                     # 解析命令
                     parts = line.split(" ", 1)
@@ -128,26 +188,67 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
                         self.handle_quit()
                         break
                     else:
-                        self.send_response(f"-ERR Unknown command: {command}")
+                        self._safe_send_response(f"-ERR Unknown command: {command}")
 
-                except Exception as e:
-                    logger.error(f"处理命令时出错: {e}")
-                    self.send_response("-ERR Internal server error")
+                except socket.timeout:
+                    logger.debug(f"POP3连接超时: {connection_id}")
+                    self._safe_send_response("-ERR Connection timeout")
                     break
+                except (
+                    ConnectionResetError,
+                    ConnectionAbortedError,
+                    BrokenPipeError,
+                ) as e:
+                    logger.debug(f"客户端断开连接: {connection_id} - {e}")
+                    break
+                except Exception as e:
+                    logger.warning(f"处理命令时出错: {e} from {connection_id}")
+                    if not self._safe_send_response("-ERR Internal server error"):
+                        break
 
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as e:
+            logger.debug(f"连接被重置或中止: {connection_id} - {e}")
         except Exception as e:
-            logger.error(f"处理连接时出错: {e}")
+            logger.debug(f"处理连接时出错: {e} from {connection_id}")
         finally:
-            logger.info(f"POP3连接关闭: {self.client_address}")
+            self.connection_active = False
+            connection_duration = time.time() - self.connection_start_time
+            logger.info(
+                f"POP3连接关闭: {connection_id}, 持续时间: {connection_duration:.2f}秒"
+            )
 
-    def send_response(self, response):
-        """发送响应"""
+    def _safe_read_line(self):
+        """安全读取一行数据"""
+        try:
+            line = self.rfile.readline().decode("utf-8", errors="replace").strip()
+            if not line:
+                return None
+            return line
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            return None
+        except Exception as e:
+            logger.debug(f"读取数据时出错: {e}")
+            return None
+
+    def _safe_send_response(self, response):
+        """安全发送响应"""
         try:
             self.wfile.write(f"{response}\r\n".encode("utf-8"))
             self.wfile.flush()
             logger.debug(f"发送响应: {response}")
+            return True
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+            logger.debug("发送响应时连接被重置")
+            self.connection_active = False
+            return False
         except Exception as e:
-            logger.error(f"发送响应时出错: {e}")
+            logger.debug(f"发送响应时出错: {e}")
+            self.connection_active = False
+            return False
+
+    def send_response(self, response):
+        """发送响应（兼容性方法）"""
+        return self._safe_send_response(response)
 
     def get_user_emails(self):
         """获取用户邮件列表（带缓存）"""
@@ -190,32 +291,32 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
     def handle_user(self, username):
         """处理USER命令"""
         self.username = username
-        self.send_response(f"+OK User {username} accepted")
+        self._safe_send_response(f"+OK User {username} accepted")
 
     def handle_pass(self, password):
         """处理PASS命令"""
         if not hasattr(self, "username"):
-            self.send_response("-ERR USER command must come first")
+            self._safe_send_response("-ERR USER command must come first")
             return
 
         try:
             user = self.user_auth.authenticate(self.username, password)
             if user:
                 self.authenticated_user = user
-                self.send_response(f"+OK User {self.username} authenticated")
+                self._safe_send_response(f"+OK User {self.username} authenticated")
                 logger.info(f"用户认证成功: {self.username}")
             else:
-                self.send_response("-ERR Authentication failed")
+                self._safe_send_response("-ERR Authentication failed")
                 logger.warning(f"用户认证失败: {self.username}")
         except Exception as e:
             logger.error(f"认证过程中出错: {e}")
-            self.send_response("-ERR Authentication error")
+            self._safe_send_response("-ERR Authentication error")
 
     def handle_stat(self):
         """处理STAT命令"""
         if not self.authenticated_user:
             logger.warning("STAT命令: 用户未认证")
-            self.send_response("-ERR Not authenticated")
+            self._safe_send_response("-ERR Not authenticated")
             return
 
         try:
@@ -229,7 +330,7 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
             logger.debug(f"STAT命令: 计算总大小 {total_size} 字节")
 
             response = f"+OK {len(emails)} {total_size}"
-            self.send_response(response)
+            self._safe_send_response(response)
             logger.info(
                 f"STAT命令成功: 用户 {self.authenticated_user.email} 有 {len(emails)} 封邮件，总大小 {total_size} 字节"
             )
@@ -239,12 +340,12 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
             import traceback
 
             logger.error(f"详细错误信息: {traceback.format_exc()}")
-            self.send_response("-ERR Internal server error")
+            self._safe_send_response("-ERR Internal server error")
 
     def handle_list(self, args):
         """处理LIST命令"""
         if not self.authenticated_user:
-            self.send_response("-ERR Not authenticated")
+            self._safe_send_response("-ERR Not authenticated")
             return
 
         try:
@@ -257,26 +358,27 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
                     if 1 <= msg_num <= len(emails):
                         email = emails[msg_num - 1]
                         size = email.get("size", 0)
-                        self.send_response(f"+OK {msg_num} {size}")
+                        self._safe_send_response(f"+OK {msg_num} {size}")
                     else:
-                        self.send_response("-ERR No such message")
+                        self._safe_send_response("-ERR No such message")
                 except ValueError:
-                    self.send_response("-ERR Invalid message number")
+                    self._safe_send_response("-ERR Invalid message number")
             else:  # LIST all messages
-                self.send_response(f"+OK {len(emails)} messages")
+                self._safe_send_response(f"+OK {len(emails)} messages")
                 for i, email in enumerate(emails, 1):
                     size = email.get("size", 0)
-                    self.send_response(f"{i} {size}")
-                self.send_response(".")
+                    if not self._safe_send_response(f"{i} {size}"):
+                        return
+                self._safe_send_response(".")
 
         except Exception as e:
             logger.error(f"处理LIST命令时出错: {e}")
-            self.send_response("-ERR Internal server error")
+            self._safe_send_response("-ERR Internal server error")
 
     def handle_retr(self, args):
         """处理RETR命令"""
         if not self.authenticated_user:
-            self.send_response("-ERR Not authenticated")
+            self._safe_send_response("-ERR Not authenticated")
             return
 
         try:
@@ -292,7 +394,8 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
                     content_bytes = content.encode("utf-8")
                     content_size = len(content_bytes)
 
-                    self.send_response(f"+OK {content_size} octets")
+                    if not self._safe_send_response(f"+OK {content_size} octets"):
+                        return
 
                     # 按POP3协议要求逐行发送内容
                     # 确保内容格式正确，统一换行符为CRLF
@@ -307,32 +410,33 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
                         # 处理行开头的点（透明性规则）
                         if line.startswith("."):
                             line = "." + line
-                        self.send_response(line)
+                        if not self._safe_send_response(line):
+                            return
 
                     # 发送结束标记
-                    self.send_response(".")
+                    self._safe_send_response(".")
                     logger.debug(
                         f"RETR命令: 返回邮件 {msg_num} 内容，大小 {content_size} 字节"
                     )
                 else:
-                    self.send_response("-ERR Message content not found")
+                    self._safe_send_response("-ERR Message content not found")
                     logger.warning(f"RETR命令: 邮件 {msg_num} 内容未找到")
             else:
-                self.send_response("-ERR No such message")
+                self._safe_send_response("-ERR No such message")
                 logger.warning(
                     f"RETR命令: 邮件编号 {msg_num} 超出范围 (1-{len(emails)})"
                 )
 
         except ValueError:
-            self.send_response("-ERR Invalid message number")
+            self._safe_send_response("-ERR Invalid message number")
         except Exception as e:
             logger.error(f"处理RETR命令时出错: {e}")
-            self.send_response("-ERR Internal server error")
+            self._safe_send_response("-ERR Internal server error")
 
     def handle_dele(self, args):
         """处理DELE命令"""
         if not self.authenticated_user:
-            self.send_response("-ERR Not authenticated")
+            self._safe_send_response("-ERR Not authenticated")
             return
 
         try:
@@ -347,34 +451,34 @@ class StablePOP3Handler(socketserver.StreamRequestHandler):
                 if success:
                     # 清除缓存，因为邮件状态已改变
                     self.invalidate_cache()
-                    self.send_response(f"+OK Message {msg_num} deleted")
+                    self._safe_send_response(f"+OK Message {msg_num} deleted")
                     logger.debug(f"DELE命令: 标记邮件 {msg_num} 为删除")
                 else:
-                    self.send_response("-ERR Failed to delete message")
+                    self._safe_send_response("-ERR Failed to delete message")
                     logger.error(f"DELE命令: 删除邮件 {msg_num} 失败")
             else:
-                self.send_response("-ERR No such message")
+                self._safe_send_response("-ERR No such message")
                 logger.warning(
                     f"DELE命令: 邮件编号 {msg_num} 超出范围 (1-{len(emails)})"
                 )
 
         except ValueError:
-            self.send_response("-ERR Invalid message number")
+            self._safe_send_response("-ERR Invalid message number")
         except Exception as e:
             logger.error(f"处理DELE命令时出错: {e}")
-            self.send_response("-ERR Internal server error")
+            self._safe_send_response("-ERR Internal server error")
 
     def handle_noop(self):
         """处理NOOP命令"""
-        self.send_response("+OK")
+        self._safe_send_response("+OK")
 
     def handle_rset(self):
         """处理RSET命令"""
-        self.send_response("+OK")
+        self._safe_send_response("+OK")
 
     def handle_quit(self):
         """处理QUIT命令"""
-        self.send_response("+OK POP3 server signing off")
+        self._safe_send_response("+OK POP3 server signing off")
 
 
 class StablePOP3Server:
@@ -387,7 +491,7 @@ class StablePOP3Server:
         use_ssl: bool = True,  # 默认启用SSL
         ssl_cert_file: str = SSL_CERT_FILE,
         ssl_key_file: str = SSL_KEY_FILE,
-        max_connections: int = 10,
+        max_connections: int = MAX_CONNECTIONS,
     ):
         self.host = host
         self.port = port
@@ -608,6 +712,7 @@ class StablePOP3Server:
             ):
                 allow_reuse_address = True
                 daemon_threads = True
+                request_queue_size = POP3_REQUEST_QUEUE_SIZE  # 增加请求队列大小
 
                 def __init__(
                     self,
@@ -617,12 +722,60 @@ class StablePOP3Server:
                     user_auth,
                     use_ssl,
                     ssl_context,
+                    max_connections,  # 添加最大连接数参数
                 ):
-                    self.email_service = email_service  # 改用email_service
+                    self.email_service = email_service
                     self.user_auth = user_auth
                     self.use_ssl = use_ssl
                     self.ssl_context = ssl_context
+                    self.max_connections = max_connections
+                    self.current_connections = 0
+                    self.connection_lock = threading.Lock()
                     super().__init__(server_address, RequestHandlerClass)
+
+                def get_request(self):
+                    """重写get_request方法以实现连接数限制"""
+                    with self.connection_lock:
+                        if self.current_connections >= self.max_connections:
+                            logger.warning(
+                                f"POP3服务器达到最大连接数限制 {self.max_connections}，拒绝新连接"
+                            )
+                            # 接受连接但立即关闭
+                            request, client_address = super().get_request()
+                            request.close()
+                            raise socket.error("连接数已达上限")
+                        self.current_connections += 1
+                        logger.debug(
+                            f"POP3新连接建立，当前连接数: {self.current_connections}/{self.max_connections}"
+                        )
+
+                    return super().get_request()
+
+                def close_request(self, request):
+                    """重写close_request方法以更新连接计数"""
+                    try:
+                        with self.connection_lock:
+                            self.current_connections = max(
+                                0, self.current_connections - 1
+                            )
+                            logger.debug(
+                                f"POP3连接断开，当前连接数: {self.current_connections}/{self.max_connections}"
+                            )
+                        if hasattr(request, "close"):
+                            request.close()
+                    except Exception as e:
+                        logger.debug(f"关闭请求时出错: {e}")
+                    super().close_request(request)
+
+                def handle_error(self, request, client_address):
+                    """处理请求错误，防止服务器崩溃"""
+                    try:
+                        logger.error(f"处理客户端 {client_address} 时出错")
+                        import traceback
+
+                        logger.error(f"错误详情: {traceback.format_exc()}")
+                    except:
+                        pass  # 确保错误处理本身不会崩溃
 
             self.server = ThreadedTCPServer(
                 (self.host, self.port),
@@ -631,6 +784,7 @@ class StablePOP3Server:
                 self.user_auth,
                 self.use_ssl,
                 self.ssl_context,
+                self.max_connections,  # 传递最大连接数
             )
 
             # 在单独线程中启动服务器
@@ -640,6 +794,9 @@ class StablePOP3Server:
             self.server_thread.start()
 
             logger.info(f"稳定POP3服务器已启动: {self.host}:{self.port}")
+            logger.info(
+                f"最大连接数: {self.max_connections}, 请求队列大小: {POP3_REQUEST_QUEUE_SIZE}"
+            )
 
         except Exception as e:
             logger.error(f"启动POP3服务器时出错: {e}")

@@ -12,12 +12,14 @@
 - **客户端**: 邮件发送/接收，本地存储，用户认证
 - **数据库**: SQLite存储，WAL模式，元数据管理
 - **安全**: SSL证书，密码加密，用户权限管理
+- **参数优先级**: 命令行参数具有最高优先级，智能SSL推断
 
 ### 📊 性能指标
 - **并发支持**: 200+并发连接
 - **SSL连接**: 100%成功率
 - **响应时间**: <3秒 (高并发场景)
 - **资源使用**: CPU <6%, 内存合理
+- **参数处理**: 命令行参数正确覆盖配置文件设置
 
 ## 快速开始
 
@@ -65,18 +67,63 @@ python server/pop3_server.py --port 995
 
 ### 发送邮件
 ```bash
-python examples/send_auth_email.py \
-  --host localhost --port 465 --ssl \
+# 使用指定端口和SSL设置（命令行参数具有最高优先级）
+python -m client.smtp_cli \
+  --host localhost --port 8025 \
   --username testuser --password testpass \
-  --sender test@example.com --recipient test@example.com \
-  --subject "测试邮件" --content "邮件内容"
+  --from test@example.com --to test@example.com \
+  --subject "测试邮件" --body "邮件内容"
+
+# SSL端口会自动启用SSL（智能推断）
+python -m client.smtp_cli \
+  --host smtp.gmail.com --port 465 \
+  --username your@gmail.com --password your_password \
+  --from your@gmail.com --to recipient@example.com \
+  --subject "测试邮件" --body "邮件内容"
 ```
 
 ### 接收邮件
 ```bash
+# 使用指定端口（非SSL，命令行参数优先）
 python -m client.pop3_cli \
-  --host localhost --port 995 \
+  --host localhost --port 8110 \
   --username testuser --password testpass --list
+
+# SSL端口会自动启用SSL（智能推断）
+python -m client.pop3_cli \
+  --host pop.gmail.com --port 995 \
+  --username your@gmail.com --password your_password --list
+```
+
+## 🔧 **参数优先级说明**（重要修复）
+
+**我们已修复了命令行参数优先级问题**，现在系统按以下优先级处理配置：
+
+### 优先级顺序
+1. **命令行参数**（最高优先级）
+2. 配置文件
+3. 环境变量  
+4. 默认值
+
+### 智能SSL推断
+- 当指定标准SSL端口（465, 587, 993, 995）时，自动启用SSL
+- 当指定非SSL端口时，自动禁用SSL
+- 用户可通过 `--ssl` 参数显式覆盖
+
+### 示例对比
+
+**修复前的问题**：
+```bash
+# 即使指定 --port 8110，系统仍使用 .env 中的 995 端口
+python -m client.pop3_cli --port 8110 --username test
+# 实际连接到: localhost:995 (忽略了用户指定的端口)
+```
+
+**修复后的正确行为**：
+```bash
+# 现在正确使用用户指定的端口
+python -m client.pop3_cli --port 8110 --username test  
+# 实际连接到: localhost:8110 (尊重用户指定的端口)
 ```
 
 ## 项目结构

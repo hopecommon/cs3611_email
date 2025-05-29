@@ -51,10 +51,12 @@ SSL_KEY_FILE = os.getenv("SSL_KEY_FILE", os.path.join(BASE_DIR, "certs", "server
 AUTH_REQUIRED = os.getenv("AUTH_REQUIRED", "True").lower() == "true"
 
 # 并发配置
-MAX_CONNECTIONS = int(os.getenv("MAX_CONNECTIONS", 100))  # 支持至少60个并发连接
+MAX_CONNECTIONS = int(
+    os.getenv("MAX_CONNECTIONS", 200)
+)  # 增加到支持200个并发连接，远超60个用户需求
 CONNECTION_TIMEOUT = int(os.getenv("CONNECTION_TIMEOUT", 60))  # 秒
-THREAD_POOL_SIZE = int(os.getenv("THREAD_POOL_SIZE", 120))  # 线程池大小
-SOCKET_BACKLOG = int(os.getenv("SOCKET_BACKLOG", 100))  # 套接字等待队列大小
+THREAD_POOL_SIZE = int(os.getenv("THREAD_POOL_SIZE", 250))  # 增加线程池大小到250
+SOCKET_BACKLOG = int(os.getenv("SOCKET_BACKLOG", 200))  # 增加套接字等待队列大小到200
 CONNECTION_IDLE_TIMEOUT = int(
     os.getenv("CONNECTION_IDLE_TIMEOUT", 300)
 )  # 空闲连接超时（秒）
@@ -62,6 +64,20 @@ GRACEFUL_SHUTDOWN_TIMEOUT = int(
     os.getenv("GRACEFUL_SHUTDOWN_TIMEOUT", 30)
 )  # 优雅关闭超时（秒）
 MONITOR_INTERVAL = int(os.getenv("MONITOR_INTERVAL", 10))  # 性能监控间隔（秒）
+
+# 高并发优化配置
+SMTP_CONCURRENT_HANDLER_COUNT = int(
+    os.getenv("SMTP_CONCURRENT_HANDLER_COUNT", 100)
+)  # SMTP并发处理器数量
+POP3_REQUEST_QUEUE_SIZE = int(
+    os.getenv("POP3_REQUEST_QUEUE_SIZE", 150)
+)  # POP3请求队列大小
+CLIENT_CONNECTION_POOL_SIZE = int(
+    os.getenv("CLIENT_CONNECTION_POOL_SIZE", 50)
+)  # 客户端连接池大小
+DB_CONNECTION_POOL_SIZE = int(
+    os.getenv("DB_CONNECTION_POOL_SIZE", 30)
+)  # 数据库连接池大小
 
 # 日志配置
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")

@@ -1,6 +1,7 @@
 """
 新的数据库处理器 - 重构版本，使用模块化设计
 提供统一简洁的API，解决原有代码的复杂性问题
+集成数据库连接池以提高并发性能
 """
 
 import os
@@ -12,6 +13,7 @@ from common.utils import setup_logging
 from common.config import DB_PATH, EMAIL_STORAGE_DIR
 from common.email_validator import EmailValidator
 from .db_connection import DatabaseConnection
+from .db_connection_pool import get_connection_pool
 from .email_repository import EmailRepository
 from .email_content_manager import EmailContentManager
 from .db_models import EmailRecord, SentEmailRecord
@@ -27,19 +29,32 @@ class EmailService:
 
     提供简洁统一的API，内部使用模块化组件
     解决原有DatabaseHandler的复杂性和易错性问题
+    集成连接池以提高并发性能
     """
 
-    def __init__(self, db_path: str = DB_PATH) -> None:
+    def __init__(
+        self, db_path: str = DB_PATH, use_connection_pool: bool = True
+    ) -> None:
         """
         初始化邮件服务
 
         Args:
             db_path: 数据库文件路径
+            use_connection_pool: 是否使用连接池
         """
         self.db_path = db_path
+        self.use_connection_pool = use_connection_pool
+
+        # 初始化连接池或单连接
+        if use_connection_pool:
+            self.connection_pool = get_connection_pool(db_path)
+            # 为了兼容性，也创建一个DatabaseConnection实例
+            self.db_connection = DatabaseConnection(db_path)
+        else:
+            self.connection_pool = None
+            self.db_connection = DatabaseConnection(db_path)
 
         # 初始化组件
-        self.db_connection = DatabaseConnection(db_path)
         self.email_repo = EmailRepository(self.db_connection)
         self.content_manager = EmailContentManager()
         self.spam_filter = KeywordSpamFilter()
@@ -48,7 +63,73 @@ class EmailService:
         # 初始化数据库
         self.db_connection.init_database()
 
-        logger.info(f"邮件服务已初始化: {db_path}")
+        logger.info(
+            f"邮件服务已初始化: {db_path}, 连接池: {'启用' if use_connection_pool else '禁用'}"
+        )
+
+    def _execute_with_pool(self, operation_func, *args, **kwargs):
+        """
+        使用连接池执行数据库操作
+
+        Args:
+            operation_func: 要执行的操作函数
+            *args: 位置参数
+            **kwargs: 关键字参数
+
+        Returns:
+            操作结果
+        """
+        if self.use_connection_pool and self.connection_pool:
+            try:
+                return operation_func(*args, **kwargs)
+            except Exception as e:
+                logger.error(f"使用连接池执行操作时出错: {e}")
+                # 回退到普通连接
+                return operation_func(*args, **kwargs)
+        else:
+            return operation_func(*args, **kwargs)
+
+    def get_pool_status(self) -> Optional[Dict[str, Any]]:
+        """
+        获取连接池状态
+
+        Returns:
+            连接池状态信息，如果未使用连接池则返回None
+        """
+        if self.use_connection_pool and self.connection_pool:
+            return self.connection_pool.get_pool_status()
+        return None
+
+    def optimize_database(self) -> bool:
+        """
+        优化数据库性能
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            if self.use_connection_pool and self.connection_pool:
+                # 使用连接池执行优化
+                self.connection_pool.execute_script(
+                    """
+                    PRAGMA optimize;
+                    PRAGMA wal_checkpoint(TRUNCATE);
+                """
+                )
+            else:
+                # 使用普通连接执行优化
+                self.db_connection.execute_script(
+                    """
+                    PRAGMA optimize;
+                    PRAGMA wal_checkpoint(TRUNCATE);
+                """
+                )
+
+            logger.info("数据库优化完成")
+            return True
+        except Exception as e:
+            logger.error(f"数据库优化失败: {e}")
+            return False
 
     # ==================== 邮件基本操作 ====================
 
@@ -654,11 +735,61 @@ class EmailService:
     # 为了保持向后兼容，提供原有方法的别名
 
     def get_email_content(self, message_id: str) -> Optional[str]:
-        """获取邮件内容（兼容性方法）"""
-        email_data = self.get_email(message_id)
-        if email_data:
-            return self.content_manager.get_content(message_id, email_data)
-        return None
+        """获取邮件内容（兼容性方法）- 学习CLI的做法，直接返回原始邮件内容"""
+        try:
+            # 方法1: 直接从文件读取（学习CLI的简单直接方式）
+            safe_id = message_id.strip().strip("<>").replace("@", "_at_")
+            import re
+
+            safe_id = re.sub(r'[\\/*?:"<>|]', "_", safe_id).strip()
+
+            # 尝试多个可能的文件路径
+            potential_paths = [
+                os.path.join(EMAIL_STORAGE_DIR, f"{safe_id}.eml"),
+                os.path.join(EMAIL_STORAGE_DIR, "inbox", f"{safe_id}.eml"),
+                os.path.join(EMAIL_STORAGE_DIR, "sent", f"{safe_id}.eml"),
+            ]
+
+            for filepath in potential_paths:
+                if os.path.exists(filepath):
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        content = f.read()
+                    logger.debug(f"直接从文件读取邮件内容: {filepath}")
+                    return content
+
+            # 方法2: 如果直接读取失败，尝试在邮件目录中搜索
+            try:
+                for filename in os.listdir(EMAIL_STORAGE_DIR):
+                    if filename.endswith(".eml") and safe_id in filename:
+                        filepath = os.path.join(EMAIL_STORAGE_DIR, filename)
+                        with open(filepath, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        logger.debug(f"通过搜索找到邮件文件: {filepath}")
+                        return content
+            except Exception as e:
+                logger.debug(f"搜索邮件文件时出错: {e}")
+
+            # 方法3: 最后才尝试数据库记录（但不进行复杂的格式化处理）
+            email_data = self.get_email(message_id)
+            if email_data and email_data.get("content_path"):
+                try:
+                    with open(email_data["content_path"], "r", encoding="utf-8") as f:
+                        content = f.read()
+                    logger.debug(
+                        f"从数据库记录的路径读取: {email_data['content_path']}"
+                    )
+                    return content
+                except Exception as e:
+                    logger.warning(
+                        f"无法从数据库记录路径读取: {email_data['content_path']}, {e}"
+                    )
+
+            logger.warning(f"无法找到邮件内容文件: {message_id}")
+            return None
+
+        except Exception as e:
+            logger.error(f"获取邮件内容时出错: {e}")
+            return None
 
     def get_email_metadata(self, message_id: str) -> Optional[Dict[str, Any]]:
         """获取邮件元数据（兼容性方法）"""

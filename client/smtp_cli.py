@@ -219,82 +219,142 @@ def main():
     args = parse_args()
     setup_logging("smtp_cli", verbose=args.verbose)
 
-    # 创建邮件对象
-    email = create_email_from_args(args)
-
     # 加载配置
     config = {}
     if args.config:
         config = load_config(args.config)
 
-    # 设置SMTP客户端参数
-    smtp_params = {}
+    # 获取SMTP设置，确保命令行参数具有最高优先级
+    smtp_config = config.get("smtp", {})
 
-    # 服务器设置
-    smtp_params["host"] = args.host or config.get("host") or SMTP_SERVER["host"]
-    use_ssl = args.ssl or config.get("use_ssl") or SMTP_SERVER["use_ssl"]
-    smtp_params["use_ssl"] = use_ssl
+    # 主机配置：命令行 > 配置文件 > 默认值
+    host = args.host or smtp_config.get("host") or SMTP_SERVER["host"]
 
-    # 使用统一的端口管理逻辑
+    # SSL配置：需要特殊处理以确保命令行优先级
+    # 如果用户明确指定了--ssl，使用该设置
+    # 如果用户没有指定--ssl，但指定了端口，根据端口判断是否应该使用SSL
+    if args.ssl:
+        # 用户明确要求SSL
+        use_ssl = True
+    elif args.port is not None:
+        # 用户指定了端口但没有指定SSL，根据端口推断
+        # 标准SSL端口(995, 465等)使用SSL，其他端口不使用SSL
+        standard_ssl_ports = {995, 465, 993, 587}  # 常见SSL端口
+        use_ssl = args.port in standard_ssl_ports
+    else:
+        # 用户既没有指定SSL也没有指定端口，使用配置文件或默认值
+        use_ssl = smtp_config.get("use_ssl") or SMTP_SERVER["use_ssl"]
+
+    # 端口配置：命令行参数具有绝对最高优先级
     cmd_port = args.port if args.port is not None else None
     cmd_ssl_port = args.ssl_port if args.ssl_port is not None else None
 
     # 根据是否使用SSL选择要解析的端口
     if use_ssl:
-        port, changed, message = resolve_port(
-            "smtp", cmd_ssl_port, use_ssl=True, auto_detect=False, is_client=True
-        )
+        # SSL模式：优先使用用户指定的端口，否则使用SSL端口解析逻辑
+        if cmd_port is not None:
+            # 用户明确指定了端口，直接使用（即使是非标准SSL端口）
+            port = cmd_port
+            port_source = "命令行指定端口"
+        else:
+            # 用户没有指定端口，使用SSL端口解析
+            port, changed, message = resolve_port(
+                "smtp", cmd_ssl_port, use_ssl=True, auto_detect=False, is_client=True
+            )
+            port_source = message
     else:
-        port, changed, message = resolve_port(
-            "smtp", cmd_port, use_ssl=False, auto_detect=False, is_client=True
-        )
+        # 非SSL模式：优先使用用户指定的端口
+        if cmd_port is not None:
+            # 用户明确指定了端口，直接使用
+            port = cmd_port
+            port_source = "命令行指定端口"
+        else:
+            # 用户没有指定端口，使用非SSL端口解析
+            port, changed, message = resolve_port(
+                "smtp", cmd_port, use_ssl=False, auto_detect=False, is_client=True
+            )
+            port_source = message
 
     if port == 0:
-        print(f"错误: {message}")
+        print(f"错误: 无效端口配置")
         sys.exit(1)
 
-    if changed:
-        print(f"提示: {message}")
+    # 显示最终使用的配置（便于用户确认）
+    print(
+        f"连接配置: {host}:{port} (SSL: {'启用' if use_ssl else '禁用'}) - {port_source}"
+    )
 
-    smtp_params["port"] = port
+    # 获取认证信息
+    username = args.username or smtp_config.get("username")
+    password = args.password or smtp_config.get("password")
 
-    # 认证设置
-    smtp_params["username"] = args.username or config.get("username")
+    if args.ask_password or not password:
+        password = getpass.getpass("请输入SMTP密码: ")
 
-    # 处理密码
-    if args.ask_password:
-        smtp_params["password"] = getpass.getpass("请输入SMTP密码: ")
-    else:
-        smtp_params["password"] = args.password or config.get("password")
+    # 验证必需的参数
+    if not args.from_addr:
+        print("错误: 必须指定发件人地址 (--from)")
+        sys.exit(1)
+
+    if not args.to_addrs:
+        print("错误: 必须指定收件人地址 (--to)")
+        sys.exit(1)
+
+    if (
+        not args.subject
+        and not args.body
+        and not args.text
+        and not args.html
+        and not args.attachment
+    ):
+        print("错误: 必须指定邮件主题、正文内容或附件")
+        sys.exit(1)
+
+    # 创建邮件对象
+    email = create_email_from_args(args)
 
     # 创建SMTP客户端
-    smtp_client = SMTPClient(**smtp_params)
+    smtp_client = SMTPClient(
+        host=host,
+        port=port,
+        use_ssl=use_ssl,
+        username=username,
+        password=password,
+        timeout=getattr(args, "timeout", 30),
+        max_retries=getattr(args, "max_retries", 3),
+    )
 
     try:
         # 连接到服务器
+        print(f"正在连接到SMTP服务器: {host}:{port}")
         smtp_client.connect()
 
         # 发送邮件
-        smtp_client.send_email(email)
+        result = smtp_client.send_email(email)
 
-        print(
-            f"邮件已成功发送到 {', '.join([addr.address for addr in email.to_addrs])}"
-        )
+        if result:
+            print("邮件发送成功!")
+            print(
+                f"邮件已发送到: {', '.join([addr.address for addr in email.to_addrs])}"
+            )
+        else:
+            print("邮件发送失败!")
+            sys.exit(1)
 
-        # 断开连接
-        smtp_client.disconnect()
     except Exception as e:
         logger.error(f"发送邮件失败: {e}")
         print(f"发送邮件失败: {e}")
         if "connection refused" in str(e).lower():
-            print(
-                f"连接被拒绝，请检查服务器 {smtp_params['host']}:{smtp_params['port']} 是否正在运行"
-            )
-            print("建议运行 python check_ports.py --check 检查端口配置")
+            print(f"连接被拒绝，请检查服务器 {host}:{port} 是否正在运行")
+        elif "authentication failed" in str(e).lower():
+            print("认证失败，请检查用户名和密码是否正确")
         import traceback
 
         logger.debug(f"错误详情: {traceback.format_exc()}")
         sys.exit(1)
+    finally:
+        # 断开连接
+        smtp_client.disconnect()
 
 
 if __name__ == "__main__":

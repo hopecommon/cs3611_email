@@ -337,30 +337,189 @@ class ViewEmailMenu:
     def _save_attachments(self, attachments):
         """保存附件"""
         try:
-            # 创建附件保存目录
-            attachments_dir = Path("attachments")
-            attachments_dir.mkdir(exist_ok=True)
+            print(f"\n📎 准备保存 {len(attachments)} 个附件")
 
-            print(f"\n💾 正在保存附件到 '{attachments_dir}' 目录...")
+            # 让用户选择保存目录
+            print("\n📁 选择保存位置:")
+            print("1. 默认附件目录 (./attachments)")
+            print("2. 桌面")
+            print("3. 下载目录")
+            print("4. 自定义路径")
 
-            from client.mime_handler import MIMEHandler
+            choice = input("请选择保存位置 [1-4]: ").strip() or "1"
+
+            # 根据选择确定保存目录
+            if choice == "2":
+                # 桌面
+                import os
+
+                desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+                if os.path.exists(desktop):
+                    base_dir = Path(desktop) / "邮件附件"
+                else:
+                    print("❌ 无法找到桌面目录，使用默认目录")
+                    base_dir = Path("attachments")
+            elif choice == "3":
+                # 下载目录
+                import os
+
+                downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+                if os.path.exists(downloads):
+                    base_dir = Path(downloads) / "邮件附件"
+                else:
+                    print("❌ 无法找到下载目录，使用默认目录")
+                    base_dir = Path("attachments")
+            elif choice == "4":
+                # 自定义路径
+                custom_path = input("请输入保存路径: ").strip()
+                if custom_path:
+                    base_dir = Path(custom_path) / "邮件附件"
+                else:
+                    print("❌ 路径为空，使用默认目录")
+                    base_dir = Path("attachments")
+            else:
+                # 默认目录
+                base_dir = Path("attachments")
+
+            # 创建保存目录
+            try:
+                base_dir.mkdir(parents=True, exist_ok=True)
+                abs_path = base_dir.resolve()
+                print(f"\n💾 保存目录: {abs_path}")
+            except Exception as e:
+                print(f"❌ 创建目录失败: {e}")
+                print("🔄 改用当前目录下的 attachments 文件夹")
+                base_dir = Path("attachments")
+                base_dir.mkdir(exist_ok=True)
+                abs_path = base_dir.resolve()
+                print(f"💾 保存目录: {abs_path}")
+
+            print(f"\n🚀 开始保存附件...")
+            print("-" * 60)
 
             saved_count = 0
+            failed_count = 0
+
             for i, attachment in enumerate(attachments, 1):
                 try:
-                    saved_path = MIMEHandler.decode_attachment(
-                        attachment, str(attachments_dir)
+                    print(
+                        f"📎 正在保存附件 {i}/{len(attachments)}: {attachment.filename}"
                     )
-                    print(f"  ✅ 附件 {i}: {attachment.filename} -> {saved_path}")
-                    saved_count += 1
-                except Exception as e:
-                    print(f"  ❌ 附件 {i}: {attachment.filename} 保存失败 - {e}")
 
-            print(f"\n🎉 成功保存 {saved_count}/{len(attachments)} 个附件")
+                    # 确保文件名安全
+                    safe_filename = self._make_safe_filename(attachment.filename)
+                    file_path = base_dir / safe_filename
+
+                    # 如果文件已存在，添加数字后缀
+                    counter = 1
+                    original_path = file_path
+                    while file_path.exists():
+                        name_parts = original_path.stem, counter, original_path.suffix
+                        file_path = (
+                            original_path.parent
+                            / f"{name_parts[0]}_{name_parts[1]}{name_parts[2]}"
+                        )
+                        counter += 1
+
+                    # 保存附件
+                    if hasattr(attachment, "content") and attachment.content:
+                        # 直接保存二进制内容
+                        with open(file_path, "wb") as f:
+                            if isinstance(attachment.content, bytes):
+                                f.write(attachment.content)
+                            else:
+                                # 尝试解码Base64
+                                import base64
+
+                                try:
+                                    content = base64.b64decode(attachment.content)
+                                    f.write(content)
+                                except:
+                                    # 如果不是Base64，直接写入字符串
+                                    f.write(str(attachment.content).encode("utf-8"))
+
+                        file_size = file_path.stat().st_size
+                        size_str = self._format_file_size(file_size)
+                        print(f"  ✅ {safe_filename} ({size_str}) -> {file_path}")
+                        saved_count += 1
+                    else:
+                        # 尝试使用MIMEHandler
+                        try:
+                            from client.mime_handler import MIMEHandler
+
+                            saved_path = MIMEHandler.decode_attachment(
+                                attachment, str(base_dir)
+                            )
+                            print(f"  ✅ {safe_filename} -> {saved_path}")
+                            saved_count += 1
+                        except Exception as mime_e:
+                            print(f"  ❌ {safe_filename} 保存失败: {mime_e}")
+                            failed_count += 1
+
+                except Exception as e:
+                    print(f"  ❌ 附件 {i} ({attachment.filename}) 保存失败: {e}")
+                    failed_count += 1
+
+            # 显示保存结果
+            print("-" * 60)
+            if saved_count > 0:
+                print(f"🎉 成功保存 {saved_count} 个附件")
+                if failed_count > 0:
+                    print(f"⚠️  {failed_count} 个附件保存失败")
+                print(f"📁 保存位置: {abs_path}")
+
+                # 询问是否打开目录
+                if os.name == "nt":  # Windows
+                    open_choice = (
+                        input("\n❓ 是否打开保存目录? (y/N): ").strip().lower()
+                    )
+                    if open_choice in ["y", "yes"]:
+                        try:
+                            import subprocess
+
+                            subprocess.run(["explorer", str(abs_path)], check=True)
+                        except:
+                            print("❌ 无法打开文件夹")
+            else:
+                print(f"❌ 所有附件保存失败 ({failed_count} 个)")
 
         except Exception as e:
             logger.error(f"保存附件时出错: {e}")
             print(f"❌ 保存附件时出错: {e}")
+            import traceback
+
+            print(f"详细错误: {traceback.format_exc()}")
+
+    def _make_safe_filename(self, filename):
+        """生成安全的文件名"""
+        import re
+
+        if not filename:
+            return "unnamed_attachment"
+
+        # 移除或替换不安全的字符
+        safe_name = re.sub(r'[<>:"/\\|?*]', "_", filename)
+        safe_name = safe_name.strip()
+
+        # 确保文件名不为空且不超过255字符
+        if not safe_name:
+            safe_name = "unnamed_attachment"
+        elif len(safe_name) > 255:
+            name, ext = os.path.splitext(safe_name)
+            safe_name = name[: 255 - len(ext)] + ext
+
+        return safe_name
+
+    def _format_file_size(self, size_bytes):
+        """格式化文件大小显示"""
+        if size_bytes < 1024:
+            return f"{size_bytes}B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes/1024:.1f}KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes/(1024*1024):.1f}MB"
+        else:
+            return f"{size_bytes/(1024*1024*1024):.1f}GB"
 
     def _delete_email(self):
         """删除邮件"""

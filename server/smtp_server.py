@@ -16,6 +16,7 @@ from pathlib import Path
 from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import SMTP as SMTPServer, LoginPassword
 from aiosmtpd.smtp import AuthResult
+import threading
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -27,6 +28,7 @@ from common.config import (
     AUTH_REQUIRED,
     MAX_CONNECTIONS,
     CONNECTION_TIMEOUT,
+    SMTP_CONCURRENT_HANDLER_COUNT,
 )
 from common.port_config import resolve_port
 from common.email_format_handler import EmailFormatHandler
@@ -85,46 +87,62 @@ class StableSMTPHandler:
             # 使用统一的邮件格式处理器解析邮件
             email_obj = EmailFormatHandler.parse_email_content(email_content)
 
+            # 修复From字段：如果解析出的From字段不正确，使用envelope的mail_from
+            if not email_obj.from_addr or email_obj.from_addr.address in [
+                "unknown@localhost",
+                "",
+                "unknown",
+            ]:
+                from common.models import EmailAddress
+
+                email_obj.from_addr = EmailAddress("", mail_from)
+                logger.info(f"修复From字段: {mail_from}")
+
             # 检查和修复Message-ID
             if not email_obj.message_id or email_obj.message_id == "unknown@localhost":
                 # 生成新的Message-ID
                 new_message_id = generate_message_id("smtp.localhost")
                 email_obj.message_id = new_message_id
-
-                # 重新格式化邮件内容以包含新的Message-ID
-                email_content = EmailFormatHandler.format_email_for_storage(email_obj)
                 logger.info(f"SMTP服务器自动添加Message-ID: {new_message_id}")
-            
+
+            # 重新格式化邮件内容，确保包含正确的头部信息
+            formatted_content = EmailFormatHandler.format_email_for_storage(email_obj)
+
             # 执行垃圾邮件过滤
-            spam_result = self.db_handler.spam_filter.analyze_email({
-                'from_addr': mail_from,
-                'subject': email_obj.subject,
-                'content': email_content
-            })
-    
+            spam_result = self.db_handler.spam_filter.analyze_email(
+                {
+                    "from_addr": email_obj.from_addr.address,  # 使用修复后的from_addr
+                    "subject": email_obj.subject,
+                    "content": formatted_content,
+                }
+            )
+
             # 记录分析结果
             logger.info(f"垃圾邮件分析结果: {spam_result}")
-            # smtp_server.py
-            logger.debug(f"垃圾邮件分析结果: is_spam={spam_result['is_spam']}, score={spam_result['score']}")
+            logger.debug(
+                f"垃圾邮件分析结果: is_spam={spam_result['is_spam']}, score={spam_result['score']}"
+            )
             logger.debug(f"匹配的关键词: {spam_result['matched_keywords']}")
-    
+
             # 使用新的EmailService统一接口保存邮件
             success = self.db_handler.save_email(
                 message_id=email_obj.message_id,
-                from_addr=mail_from,
+                from_addr=email_obj.from_addr.address,  # 使用修复后的from_addr
                 to_addrs=rcpt_tos,
                 subject=email_obj.subject,
-                content=email_content,
+                content=formatted_content,  # 使用格式化后的内容
                 date=email_obj.date or datetime.datetime.now(),
-                is_spam=spam_result['is_spam'],
-                spam_score=spam_result['score']
+                is_spam=spam_result["is_spam"],
+                spam_score=spam_result["score"],
             )
 
             if not success:
                 logger.error(f"邮件保存失败: {email_obj.message_id}")
                 raise Exception("邮件保存失败")
 
-            logger.debug(f"邮件已保存: {email_obj.message_id}")
+            logger.debug(
+                f"邮件已保存: {email_obj.message_id}, From: {email_obj.from_addr.address}"
+            )
 
         except Exception as e:
             logger.error(f"处理邮件存储时出错: {e}")
@@ -132,7 +150,7 @@ class StableSMTPHandler:
 
 
 class StableSMTPServer:
-    """稳定的SMTP服务器"""
+    """稳定的SMTP服务器 - 增强Windows兼容性"""
 
     def __init__(
         self,
@@ -169,7 +187,8 @@ class StableSMTPServer:
         logger.info(
             f"稳定SMTP服务器已初始化: {host}:{port}, "
             f"SSL: {'启用' if self.use_ssl else '禁用'}, "
-            f"认证: {'启用' if require_auth else '禁用'}"
+            f"认证: {'启用' if require_auth else '禁用'}, "
+            f"最大连接数: {max_connections}"
         )
 
     def _create_ssl_context(self):
@@ -361,7 +380,7 @@ class StableSMTPServer:
         )
 
     def start(self) -> None:
-        """启动SMTP服务器"""
+        """启动SMTP服务器 - 增强并发配置"""
         if self.controller:
             logger.warning("SMTP服务器已经在运行")
             return
@@ -370,22 +389,103 @@ class StableSMTPServer:
             # 测试端口是否可用
             self._test_port_availability()
 
-            # 创建控制器
-            self.controller = Controller(
+            # 创建自定义的服务器工厂，支持连接数限制和Windows优化
+            class LimitedConnectionController(Controller):
+                def __init__(self, handler, hostname, port, max_connections, **kwargs):
+                    self.max_connections = max_connections
+                    self.current_connections = 0
+                    self.connection_lock = threading.Lock()
+                    super().__init__(handler, hostname=hostname, port=port, **kwargs)
+
+                def factory(self):
+                    # 创建SMTP实例，并添加连接计数和Windows优化
+                    smtp_instance = super().factory()
+                    original_connection_made = smtp_instance.connection_made
+                    original_connection_lost = smtp_instance.connection_lost
+
+                    def connection_made(transport):
+                        with self.connection_lock:
+                            if self.current_connections >= self.max_connections:
+                                logger.warning(
+                                    f"SMTP达到最大连接数限制 {self.max_connections}，拒绝新连接"
+                                )
+                                transport.close()
+                                return
+                            self.current_connections += 1
+                            logger.debug(
+                                f"SMTP新连接建立，当前连接数: {self.current_connections}/{self.max_connections}"
+                            )
+
+                        # Windows socket优化
+                        if hasattr(transport, "get_extra_info"):
+                            socket_obj = transport.get_extra_info("socket")
+                            if socket_obj and hasattr(socket_obj, "setsockopt"):
+                                try:
+                                    # 设置TCP_NODELAY以减少延迟
+                                    socket_obj.setsockopt(
+                                        socket.IPPROTO_TCP, socket.TCP_NODELAY, 1
+                                    )
+                                    # 设置SO_KEEPALIVE以检测断开的连接
+                                    socket_obj.setsockopt(
+                                        socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1
+                                    )
+                                    # Windows特定的keepalive设置
+                                    if hasattr(socket, "SIO_KEEPALIVE_VALS"):
+                                        try:
+                                            keepalive_vals = (1, 30000, 5000)
+                                            socket_obj.ioctl(
+                                                socket.SIO_KEEPALIVE_VALS,
+                                                keepalive_vals,
+                                            )
+                                        except:
+                                            pass
+                                except Exception as e:
+                                    logger.debug(f"设置socket选项时出错: {e}")
+
+                        return original_connection_made(transport)
+
+                    def connection_lost(exc):
+                        with self.connection_lock:
+                            self.current_connections = max(
+                                0, self.current_connections - 1
+                            )
+                            if exc:
+                                logger.debug(
+                                    f"SMTP连接异常断开，当前连接数: {self.current_connections}/{self.max_connections}, 错误: {exc}"
+                                )
+                            else:
+                                logger.debug(
+                                    f"SMTP连接正常断开，当前连接数: {self.current_connections}/{self.max_connections}"
+                                )
+                        return original_connection_lost(exc)
+
+                    smtp_instance.connection_made = connection_made
+                    smtp_instance.connection_lost = connection_lost
+                    return smtp_instance
+
+            # 创建控制器，配置更高的并发参数和Windows优化
+            self.controller = LimitedConnectionController(
                 handler=self.handler,
                 hostname=self.host,
                 port=self.port,
+                max_connections=self.max_connections,
                 authenticator=self.auth_callback if self.require_auth else None,
                 auth_require_tls=False,  # 允许非TLS认证以提高兼容性
                 ssl_context=self.ssl_context,
                 ready_timeout=30,
                 enable_SMTPUTF8=True,
+                decode_data=True,  # 确保数据解码
+                # Windows兼容性优化
+                data_size_limit=10 * 1024 * 1024,  # 10MB限制
             )
 
             # 启动控制器
             self.controller.start()
 
             logger.info(f"稳定SMTP服务器已启动: {self.host}:{self.port}")
+            logger.info(
+                f"最大连接数: {self.max_connections}, 并发处理器: {SMTP_CONCURRENT_HANDLER_COUNT}"
+            )
 
         except Exception as e:
             logger.error(f"启动SMTP服务器时出错: {e}")

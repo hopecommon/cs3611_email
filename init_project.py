@@ -144,7 +144,7 @@ SSL_CERT_FILE=certs/server.crt
 SSL_KEY_FILE=certs/server.key
 
 # 并发配置
-MAX_CONNECTIONS=10
+MAX_CONNECTIONS=200
 CONNECTION_TIMEOUT=60
 
 # 日志配置

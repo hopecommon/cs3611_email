@@ -206,31 +206,65 @@ def main():
     if args.config:
         config = load_config(args.config)
 
-    # 获取POP3设置
+    # 获取POP3设置，确保命令行参数具有最高优先级
     pop3_config = config.get("pop3", {})
-    host = args.host or pop3_config.get("host") or POP3_SERVER["host"]
-    use_ssl = args.ssl or pop3_config.get("use_ssl") or POP3_SERVER["use_ssl"]
 
-    # 使用统一的端口管理逻辑
+    # 主机配置：命令行 > 配置文件 > 默认值
+    host = args.host or pop3_config.get("host") or POP3_SERVER["host"]
+
+    # SSL配置：需要特殊处理以确保命令行优先级
+    # 如果用户明确指定了--ssl，使用该设置
+    # 如果用户没有指定--ssl，但指定了端口，根据端口判断是否应该使用SSL
+    if args.ssl:
+        # 用户明确要求SSL
+        use_ssl = True
+    elif args.port is not None:
+        # 用户指定了端口但没有指定SSL，根据端口推断
+        # 标准SSL端口(995, 465等)使用SSL，其他端口不使用SSL
+        standard_ssl_ports = {995, 465, 993, 587}  # 常见SSL端口
+        use_ssl = args.port in standard_ssl_ports
+    else:
+        # 用户既没有指定SSL也没有指定端口，使用配置文件或默认值
+        use_ssl = pop3_config.get("use_ssl") or POP3_SERVER["use_ssl"]
+
+    # 端口配置：命令行参数具有绝对最高优先级
     cmd_port = args.port if args.port is not None else None
     cmd_ssl_port = args.ssl_port if args.ssl_port is not None else None
 
     # 根据是否使用SSL选择要解析的端口
     if use_ssl:
-        port, changed, message = resolve_port(
-            "pop3", cmd_ssl_port, use_ssl=True, auto_detect=False, is_client=True
-        )
+        # SSL模式：优先使用用户指定的端口，否则使用SSL端口解析逻辑
+        if cmd_port is not None:
+            # 用户明确指定了端口，直接使用（即使是非标准SSL端口）
+            port = cmd_port
+            port_source = "命令行指定端口"
+        else:
+            # 用户没有指定端口，使用SSL端口解析
+            port, changed, message = resolve_port(
+                "pop3", cmd_ssl_port, use_ssl=True, auto_detect=False, is_client=True
+            )
+            port_source = message
     else:
-        port, changed, message = resolve_port(
-            "pop3", cmd_port, use_ssl=False, auto_detect=False, is_client=True
-        )
+        # 非SSL模式：优先使用用户指定的端口
+        if cmd_port is not None:
+            # 用户明确指定了端口，直接使用
+            port = cmd_port
+            port_source = "命令行指定端口"
+        else:
+            # 用户没有指定端口，使用非SSL端口解析
+            port, changed, message = resolve_port(
+                "pop3", cmd_port, use_ssl=False, auto_detect=False, is_client=True
+            )
+            port_source = message
 
     if port == 0:
-        print(f"错误: {message}")
+        print(f"错误: 无效端口配置")
         sys.exit(1)
 
-    if changed:
-        print(f"提示: {message}")
+    # 显示最终使用的配置（便于用户确认）
+    print(
+        f"连接配置: {host}:{port} (SSL: {'启用' if use_ssl else '禁用'}) - {port_source}"
+    )
 
     # 获取认证信息
     username = args.username or pop3_config.get("username")
