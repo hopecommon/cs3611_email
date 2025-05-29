@@ -200,6 +200,7 @@ class EmailService:
         user_email: Optional[str] = None,
         include_deleted: bool = False,
         include_spam: bool = True,
+        include_recalled: bool = False,  # 新增参数
         is_spam: Optional[bool] = None,  # 新增过滤参数
         limit: int = 100,
         offset: int = 0,
@@ -211,6 +212,8 @@ class EmailService:
             user_email: 用户邮箱过滤
             include_deleted: 是否包含已删除邮件
             include_spam: 是否包含垃圾邮件
+            include_recalled: 是否包含已撤回邮件
+            is_spam: 垃圾邮件过滤参数
             limit: 返回数量限制
             offset: 偏移量
 
@@ -222,6 +225,7 @@ class EmailService:
                 user_email=user_email,
                 include_deleted=include_deleted,
                 include_spam=include_spam,
+                include_recalled=include_recalled,  # 传递参数
                 is_spam=is_spam,
                 limit=limit,
                 offset=offset,
@@ -392,7 +396,9 @@ class EmailService:
                 has_attachments=kwargs.get("has_attachments", False),
                 content_path=content_path,
                 status=kwargs.get("status", "sent"),
-                is_read=kwargs.get("is_read", False),
+                is_read=kwargs.get("is_read", True),
+                is_spam=kwargs.get("is_spam", False),
+                spam_score=kwargs.get("spam_score", 0.0),
             )
 
             # 保存到数据库
@@ -431,8 +437,31 @@ class EmailService:
             sent_dict = sent_record.to_dict()
 
             if include_content:
-                content = self.content_manager.get_content(message_id, sent_dict)
-                sent_dict["content"] = content
+                full_eml_content = self.content_manager.get_content(
+                    message_id, sent_dict
+                )
+                if full_eml_content:
+                    try:
+                        from common.email_format_handler import EmailFormatHandler
+
+                        parsed_email_obj = EmailFormatHandler.parse_mime_message(
+                            full_eml_content
+                        )
+                        # 优先使用 html_content，其次 text_content
+                        sent_dict["content"] = (
+                            parsed_email_obj.html_content
+                            or parsed_email_obj.text_content
+                            or ""
+                        )
+                    except Exception as e:
+                        logger.error(f"解析已发送邮件内容失败 for {message_id}: {e}")
+                        sent_dict["content"] = (
+                            full_eml_content  # 解析失败则返回原始内容
+                        )
+                else:
+                    sent_dict["content"] = ""
+            else:
+                sent_dict["content"] = ""  # 确保即使不include_content也有这个key
 
             return sent_dict
         except Exception as e:
@@ -669,6 +698,90 @@ class EmailService:
         except Exception as e:
             logger.error(f"压缩数据库时出错: {e}")
             return False
+
+    # ==================== 邮件撤回功能 ====================
+
+    def recall_email(self, message_id: str, user_email: str) -> Dict[str, Any]:
+        """
+        撤回邮件（统一接口）
+
+        Args:
+            message_id: 邮件ID
+            user_email: 操作用户邮箱
+
+        Returns:
+            Dict包含success(bool)、message(str)等信息
+        """
+        try:
+            # 检查是否可以撤回
+            permission_check = self.email_repo.can_recall_email(message_id, user_email)
+
+            if not permission_check["can_recall"]:
+                return {
+                    "success": False,
+                    "message": permission_check["reason"],
+                    "recalled": False,
+                }
+
+            # 执行撤回操作
+            success = self.email_repo.recall_email(message_id, user_email)
+
+            if success:
+                return {"success": True, "message": "邮件撤回成功", "recalled": True}
+            else:
+                return {
+                    "success": False,
+                    "message": "邮件撤回失败，请重试",
+                    "recalled": False,
+                }
+
+        except Exception as e:
+            logger.error(f"撤回邮件时出错: {e}")
+            return {
+                "success": False,
+                "message": f"撤回邮件时出错: {e}",
+                "recalled": False,
+            }
+
+    def get_recallable_emails(
+        self, user_email: str, limit: int = 50
+    ) -> List[Dict[str, Any]]:
+        """
+        获取可撤回的邮件列表
+
+        Args:
+            user_email: 用户邮箱
+            limit: 返回数量限制
+
+        Returns:
+            可撤回的邮件列表
+        """
+        try:
+            # 获取用户的已发送邮件（24小时内，未撤回）
+            import datetime
+
+            # 计算24小时前的时间
+            time_limit = datetime.datetime.now() - datetime.timedelta(hours=24)
+
+            sent_emails = self.list_sent_emails(from_addr=user_email, limit=limit)
+
+            recallable_emails = []
+            for email in sent_emails:
+                # 检查是否可以撤回
+                permission_check = self.email_repo.can_recall_email(
+                    email["message_id"], user_email
+                )
+
+                if permission_check["can_recall"]:
+                    email["can_recall"] = True
+                    email["recall_reason"] = permission_check["reason"]
+                    recallable_emails.append(email)
+
+            return recallable_emails
+
+        except Exception as e:
+            logger.error(f"获取可撤回邮件列表时出错: {e}")
+            return []
 
 
 # 为了保持向后兼容，创建原名称的别名

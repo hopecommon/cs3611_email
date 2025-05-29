@@ -187,19 +187,38 @@ class EmailFormatValidator:
 
             # 根据RFC 5322，只有From和Date是必需的头部字段
             required_headers = ["From", "Date"]
+            missing_headers = []
+
             for header in required_headers:
                 if not msg.get(header):
+                    missing_headers.append(header)
+
+            # 如果标准解析发现缺少必需字段，尝试手动检查原始内容
+            if missing_headers:
+                logger.debug(f"标准解析缺少字段: {missing_headers}，尝试手动检查")
+
+                # 手动检查原始内容中是否存在这些字段
+                content_upper = raw_content.upper()
+                for header in missing_headers[:]:  # 创建副本进行迭代
+                    # 检查是否存在该字段（不区分大小写）
+                    if f"{header.upper()}:" in content_upper:
+                        missing_headers.remove(header)
+                        logger.debug(f"在原始内容中找到字段: {header}")
+
+            # 如果仍然缺少必需字段，记录警告
+            if missing_headers:
+                for header in missing_headers:
                     logger.warning(f"缺少必需的头部字段: {header}")
-                    return False
+                return False
 
             # Message-ID是可选的，但建议包含
-            if not msg.get("Message-ID"):
+            if not msg.get("Message-ID") and "MESSAGE-ID:" not in raw_content.upper():
                 logger.info("邮件缺少Message-ID头部（可选字段），建议添加以提高兼容性")
 
             return True
 
         except Exception as e:
-            logger.error(f"验证邮件格式失败: {e}")
+            logger.error(f"邮件格式验证失败: {e}")
             return False
 
     @classmethod

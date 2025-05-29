@@ -74,15 +74,39 @@ class SendEmailMenu:
 
     def _init_smtp_client(self):
         """初始化SMTP客户端"""
-        if self.smtp_client:
-            return True
-
         try:
             # 获取当前账户的SMTP配置
             smtp_config = self.main_cli.get_smtp_config()
             if not smtp_config:
                 print("❌ 未找到SMTP配置，请先在账户设置中配置邮箱账户")
                 return False
+
+            # 检查是否已有客户端，且配置是否发生变化
+            if self.smtp_client:
+                # 检查配置是否有变化
+                current_config = {
+                    "host": smtp_config["host"],
+                    "port": smtp_config["port"],
+                    "username": smtp_config["username"],
+                    "use_ssl": smtp_config.get("use_ssl", True),
+                    "auth_method": smtp_config.get("auth_method", "AUTO"),
+                }
+
+                # 如果有记录的配置且与当前配置相同，直接返回
+                if (
+                    hasattr(self, "_last_smtp_config")
+                    and self._last_smtp_config == current_config
+                ):
+                    return True
+                else:
+                    # 配置有变化，清理旧客户端
+                    try:
+                        if hasattr(self.smtp_client, "disconnect"):
+                            self.smtp_client.disconnect()
+                    except Exception as e:
+                        logger.debug(f"清理旧SMTP连接时出错: {e}")
+                    self.smtp_client = None
+                    print("🔄 检测到账号配置变更，正在重新连接...")
 
             print(f"🔄 正在连接到 {smtp_config['host']}:{smtp_config['port']}...")
 
@@ -95,6 +119,15 @@ class SendEmailMenu:
                 password=smtp_config["password"],
                 auth_method=smtp_config.get("auth_method", "AUTO"),
             )
+
+            # 记录当前配置，用于下次比较
+            self._last_smtp_config = {
+                "host": smtp_config["host"],
+                "port": smtp_config["port"],
+                "username": smtp_config["username"],
+                "use_ssl": smtp_config.get("use_ssl", True),
+                "auth_method": smtp_config.get("auth_method", "AUTO"),
+            }
 
             logger.info(
                 f"SMTP客户端已初始化: {smtp_config['host']}:{smtp_config['port']}"

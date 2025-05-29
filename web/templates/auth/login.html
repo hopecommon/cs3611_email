@@ -1,0 +1,56 @@
+{% extends "base.html" %} {% block title %}用户登录 - {{ app_name }}{% endblock
+%} {% block content %}
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-4">
+      <div class="card shadow">
+        <div class="card-header bg-primary text-white text-center">
+          <h4 class="mb-0"><i class="fas fa-sign-in-alt me-2"></i>用户登录</h4>
+        </div>
+        <div class="card-body">
+          <form method="POST">
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3">
+              {{ form.username.label(class="form-label") }} {{
+              form.username(class="form-control" + (" is-invalid" if
+              form.username.errors else "")) }} {% if form.username.errors %}
+              <div class="invalid-feedback">
+                {% for error in form.username.errors %} {{ error }} {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              {{ form.password.label(class="form-label") }} {{
+              form.password(class="form-control" + (" is-invalid" if
+              form.password.errors else "")) }} {% if form.password.errors %}
+              <div class="invalid-feedback">
+                {% for error in form.password.errors %} {{ error }} {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3 form-check">
+              {{ form.remember_me() }} {{
+              form.remember_me.label(class="form-check-label") }}
+            </div>
+
+            <div class="d-grid">{{ form.submit(class="btn btn-primary") }}</div>
+          </form>
+        </div>
+        <div class="card-footer text-center">
+          <small class="text-muted">
+            还没有账户？
+            <a
+              href="{{ url_for('auth.register') }}"
+              class="text-decoration-none"
+              >立即注册</a
+            >
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

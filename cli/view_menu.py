@@ -35,10 +35,11 @@ class ViewEmailMenu:
             print("3. 📖 查看邮件详情")
             print("4. 🗑️  删除邮件")
             print("5. 👁️  标记为已读/未读")
+            print("6. 🔙 撤回邮件")
             print("0. 🔙 返回主菜单")
             print("-" * 60)
 
-            choice = input("\n请选择操作 [0-5]: ").strip()
+            choice = input("\n请选择操作 [0-6]: ").strip()
 
             if choice == "1":
                 self.main_cli.set_current_folder("inbox")
@@ -52,15 +53,11 @@ class ViewEmailMenu:
                     continue
                 self._view_email_details()
             elif choice == "4":
-                if not self.main_cli.get_email_list():
-                    input("❌ 邮件列表为空，请先获取邮件，按回车键继续...")
-                    continue
                 self._delete_email()
             elif choice == "5":
-                if not self.main_cli.get_email_list():
-                    input("❌ 邮件列表为空，请先获取邮件，按回车键继续...")
-                    continue
                 self._toggle_read_status()
+            elif choice == "6":
+                self._recall_email()
             elif choice == "0":
                 return
             else:
@@ -93,17 +90,30 @@ class ViewEmailMenu:
         # 从数据库获取邮件列表
         try:
             db = self.main_cli.get_db()
+
+            # 修复：获取当前账户信息，确保邮件隔离
+            current_account = self.main_cli.get_current_account()
+            if not current_account:
+                print("❌ 未找到当前账户信息，请先登录")
+                input("\n按回车键继续...")
+                return
+
+            current_user_email = current_account["email"]
+            print(f"📧 当前账户: {current_user_email}")
+
             if self.main_cli.get_current_folder() == "sent":
+                # 查询已发送邮件：按发件人过滤
                 emails = db.list_sent_emails(
-                    include_spam=(filter_choice != "2"),  # 仅当选择2时不包含垃圾邮件
-                    is_spam=(
-                        (filter_choice == "3") if filter_choice == "3" else None
-                    ),  # 仅当选择3时过滤垃圾邮件
+                    from_addr=current_user_email,  # 修复：按发件人过滤
+                    include_spam=(filter_choice != "2"),
+                    is_spam=((filter_choice == "3") if filter_choice == "3" else None),
                 )
             else:
+                # 查询收到的邮件：按收件人过滤
                 emails = db.list_emails(
-                    include_spam=(filter_choice != "2"),  # 仅当选择2时不包含垃圾邮件
-                    is_spam=(filter_choice == "3"),  # 仅当选择3时过滤垃圾邮件
+                    user_email=current_user_email,  # 关键修复：按收件人过滤
+                    include_spam=(filter_choice != "2"),
+                    is_spam=(filter_choice == "3"),
                 )
 
             if not emails:
@@ -117,14 +127,19 @@ class ViewEmailMenu:
             # 显示邮件列表
             print(f"\n📊 共找到 {len(emails)} 封邮件")
             print("-" * 60)
-            print(f"{'ID':<5} {'状态':<4} {'日期':<20} {'发件人':<30} {'主题':<40}")
+            print(f"{'ID':<5} {'状态':<6} {'日期':<20} {'发件人':<30} {'主题':<40}")
             print("-" * 100)
 
             # 导入RFC 2047解码器
             from common.email_header_processor import EmailHeaderProcessor
 
             for i, email in enumerate(emails):
-                status = "✅已读" if email.get("is_read") else "📬未读"
+                # 基础状态显示
+                if email.get("is_recalled"):
+                    status = "🔙已撤回"
+                else:
+                    status = "✅已读" if email.get("is_read") else "📬未读"
+
                 date = email.get("date", "")
                 sender = email.get("from_addr", email.get("sender", ""))
                 subject = email.get("subject", "")
@@ -135,11 +150,15 @@ class ViewEmailMenu:
                 if sender:
                     sender = EmailHeaderProcessor.decode_header_value(sender)
 
+                # 如果是撤回的邮件，在主题前加标记
+                if email.get("is_recalled"):
+                    subject = f"[已撤回] {subject}"
+
                 # 截断过长的字段以适应显示
                 sender = sender[:28] + ".." if len(sender) > 30 else sender
                 subject = subject[:38] + ".." if len(subject) > 40 else subject
 
-                print(f"{i+1:<5} {status:<6} {date:<20} {sender:<30} {subject:<40}")
+                print(f"{i+1:<5} {status:<8} {date:<20} {sender:<30} {subject:<40}")
 
             # 选择邮件
             print("-" * 100)
@@ -291,17 +310,27 @@ class ViewEmailMenu:
         try:
             if not current_email.get("is_read"):
                 db = self.main_cli.get_db()
-                success = db.update_email(current_email.get("message_id"), is_read=True)
+                message_id = current_email.get("message_id")
+
+                # 判断邮件类型，用于显示信息
+                current_folder = self.main_cli.get_current_folder()
+                is_sent_email = (current_folder == "sent") or current_email.get(
+                    "type"
+                ) == "sent"
+                email_type = "已发送邮件" if is_sent_email else "邮件"
+
+                # 使用统一的update_email方法，它内部会自动判断邮件类型
+                success = db.update_email(message_id, is_read=True)
+
                 if success:
-                    print("\n📬 邮件已标记为已读")
+                    print(f"\n📬 {email_type}已标记为已读")
                     # 更新本地邮件列表中的状态
                     current_email["is_read"] = True
                 else:
-                    logger.warning(
-                        f"标记邮件为已读失败: {current_email.get('message_id')}"
-                    )
+                    logger.warning(f"标记{email_type}为已读失败: {message_id}")
         except Exception as e:
             logger.error(f"标记邮件为已读时出错: {e}")
+            print(f"❌ 标记邮件为已读时出错: {e}")
 
         input("\n按回车键继续...")
 
@@ -335,21 +364,248 @@ class ViewEmailMenu:
 
     def _delete_email(self):
         """删除邮件"""
-        print("\n🗑️  删除邮件功能正在开发中...")
-        print("💡 计划功能:")
-        print("   • 软删除（标记为已删除）")
-        print("   • 硬删除（从服务器删除）")
-        print("   • 批量删除")
-        input("按回车键继续...")
+        email_list = self.main_cli.get_email_list()
+
+        # 如果邮件列表为空，引导用户先查看邮件列表
+        if not email_list:
+            self.main_cli.clear_screen()
+            print("\n" + "=" * 60)
+            print("🗑️  删除邮件")
+            print("=" * 60)
+            print("❌ 当前没有邮件列表")
+            print("💡 请先选择 '收件箱' 或 '已发送' 来查看邮件列表")
+            input("\n按回车键返回...")
+            return
+
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("🗑️  删除邮件")
+        print("=" * 60)
+
+        # 显示当前邮件列表
+        print(f"\n📊 当前邮件列表 (共 {len(email_list)} 封)")
+        print("-" * 60)
+        print(f"{'ID':<5} {'状态':<6} {'日期':<20} {'发件人':<30} {'主题':<40}")
+        print("-" * 100)
+
+        for i, email in enumerate(email_list):
+            status = "✅已读" if email.get("is_read") else "📬未读"
+            date = email.get("date", "")
+            sender = email.get("from_addr", email.get("sender", ""))
+            subject = email.get("subject", "")
+
+            # 解码RFC 2047编码的主题和发件人
+            from common.email_header_processor import EmailHeaderProcessor
+
+            if subject:
+                subject = EmailHeaderProcessor.decode_header_value(subject)
+            if sender:
+                sender = EmailHeaderProcessor.decode_header_value(sender)
+
+            # 截断过长的字段以适应显示
+            sender = sender[:28] + ".." if len(sender) > 30 else sender
+            subject = subject[:38] + ".." if len(subject) > 40 else subject
+
+            print(f"{i+1:<5} {status:<6} {date:<20} {sender:<30} {subject:<40}")
+
+        # 选择要删除的邮件
+        print("-" * 100)
+        while True:
+            choice = input("\n🗑️  请输入要删除的邮件ID (或按回车返回): ").strip()
+            if not choice:
+                return
+
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(email_list):
+                    email = email_list[idx]
+                    subject = email.get("subject", "(无主题)")
+
+                    # 解码主题用于显示
+                    from common.email_header_processor import EmailHeaderProcessor
+
+                    display_subject = EmailHeaderProcessor.decode_header_value(subject)
+
+                    # 确认删除
+                    print(f"\n⚠️  确认删除操作")
+                    print(f"📧 邮件主题: {display_subject}")
+                    print(f"📤 发件人: {email.get('from_addr', '未知')}")
+                    print(f"📅 日期: {email.get('date', '未知')}")
+
+                    confirm = (
+                        input(f"\n❓ 确定要删除这封邮件吗? (y/N): ").strip().lower()
+                    )
+
+                    if confirm in ["y", "yes"]:
+                        try:
+                            # 执行删除操作
+                            db = self.main_cli.get_db()
+                            message_id = email.get("message_id")
+
+                            # 判断是否为已发送邮件
+                            current_folder = self.main_cli.get_current_folder()
+                            is_sent_email = (current_folder == "sent") or email.get(
+                                "type"
+                            ) == "sent"
+
+                            if is_sent_email:
+                                # 删除已发送邮件
+                                success = db.delete_sent_email_metadata(message_id)
+                                email_type = "已发送邮件"
+                            else:
+                                # 软删除接收邮件（标记为已删除）
+                                success = db.update_email(message_id, is_deleted=True)
+                                email_type = "邮件"
+
+                            if success:
+                                print(f"✅ {email_type}删除成功！")
+
+                                # 从本地列表中移除
+                                email_list.pop(idx)
+                                self.main_cli.set_email_list(email_list)
+
+                                # 如果列表为空，提示用户
+                                if not email_list:
+                                    print("📭 邮件列表已清空")
+                                    input("\n按回车键返回...")
+                                    return
+
+                                # 询问是否继续删除
+                                continue_choice = (
+                                    input(f"\n❓ 是否继续删除其他邮件? (y/N): ")
+                                    .strip()
+                                    .lower()
+                                )
+                                if continue_choice not in ["y", "yes"]:
+                                    input("\n按回车键返回...")
+                                    return
+
+                                # 重新显示列表
+                                break
+                            else:
+                                print(f"❌ {email_type}删除失败！")
+                                input("\n按回车键继续...")
+                        except Exception as e:
+                            logger.error(f"删除邮件时出错: {e}")
+                            print(f"❌ 删除邮件时出错: {e}")
+                            input("\n按回车键继续...")
+                    else:
+                        print("❌ 删除操作已取消")
+                        input("\n按回车键继续...")
+                        return
+                else:
+                    print("❌ 无效的邮件ID")
+            except ValueError:
+                print("❌ 请输入有效的数字")
 
     def _toggle_read_status(self):
         """切换邮件已读/未读状态"""
-        print("\n👁️  切换邮件状态功能正在开发中...")
-        print("💡 计划功能:")
-        print("   • 标记为已读/未读")
-        print("   • 批量状态更改")
-        print("   • 重要邮件标记")
-        input("按回车键继续...")
+        email_list = self.main_cli.get_email_list()
+
+        # 如果邮件列表为空，引导用户先查看邮件列表
+        if not email_list:
+            self.main_cli.clear_screen()
+            print("\n" + "=" * 60)
+            print("👁️  标记邮件状态")
+            print("=" * 60)
+            print("❌ 当前没有邮件列表")
+            print("💡 请先选择 '收件箱' 或 '已发送' 来查看邮件列表")
+            input("\n按回车键返回...")
+            return
+
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("👁️  标记邮件状态")
+        print("=" * 60)
+
+        # 显示当前邮件列表
+        print(f"\n📊 当前邮件列表 (共 {len(email_list)} 封)")
+        print("-" * 60)
+        print(f"{'ID':<5} {'状态':<6} {'日期':<20} {'发件人':<30} {'主题':<40}")
+        print("-" * 100)
+
+        for i, email in enumerate(email_list):
+            status = "✅已读" if email.get("is_read") else "📬未读"
+            date = email.get("date", "")
+            sender = email.get("from_addr", email.get("sender", ""))
+            subject = email.get("subject", "")
+
+            # 解码RFC 2047编码的主题和发件人
+            from common.email_header_processor import EmailHeaderProcessor
+
+            if subject:
+                subject = EmailHeaderProcessor.decode_header_value(subject)
+            if sender:
+                sender = EmailHeaderProcessor.decode_header_value(sender)
+
+            # 截断过长的字段以适应显示
+            sender = sender[:28] + ".." if len(sender) > 30 else sender
+            subject = subject[:38] + ".." if len(subject) > 40 else subject
+
+            print(f"{i+1:<5} {status:<6} {date:<20} {sender:<30} {subject:<40}")
+
+        # 选择要修改状态的邮件
+        print("-" * 100)
+        while True:
+            choice = input("\n👁️  请输入要修改状态的邮件ID (或按回车返回): ").strip()
+            if not choice:
+                return
+
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(email_list):
+                    email = email_list[idx]
+                    current_status = email.get("is_read", False)
+                    new_status = not current_status
+                    status_text = "已读" if new_status else "未读"
+
+                    subject = email.get("subject", "(无主题)")
+                    from common.email_header_processor import EmailHeaderProcessor
+
+                    display_subject = EmailHeaderProcessor.decode_header_value(subject)
+
+                    # 确认操作
+                    print(f"\n📧 邮件: {display_subject}")
+                    print(f"🔄 当前状态: {'已读' if current_status else '未读'}")
+                    print(f"🎯 将变更为: {status_text}")
+
+                    confirm = (
+                        input(f"\n❓ 确认将邮件标记为{status_text}? (y/N): ")
+                        .strip()
+                        .lower()
+                    )
+
+                    if confirm in ["y", "yes"]:
+                        try:
+                            # 执行状态更新
+                            db = self.main_cli.get_db()
+                            message_id = email.get("message_id")
+
+                            success = db.update_email(message_id, is_read=new_status)
+
+                            if success:
+                                print(f"✅ 邮件已标记为{status_text}！")
+
+                                # 更新本地列表状态
+                                email["is_read"] = new_status
+
+                                input("\n按回车键继续...")
+                                break
+                            else:
+                                print(f"❌ 状态更新失败！")
+                                input("\n按回车键继续...")
+                        except Exception as e:
+                            logger.error(f"更新邮件状态时出错: {e}")
+                            print(f"❌ 更新邮件状态时出错: {e}")
+                            input("\n按回车键继续...")
+                    else:
+                        print("❌ 操作已取消")
+                        input("\n按回车键继续...")
+                        return
+                else:
+                    print("❌ 无效的邮件ID")
+            except ValueError:
+                print("❌ 请输入有效的数字")
 
     def _display_basic_email_info(self, email_data):
         """显示数据库中的基本邮件信息"""
@@ -553,3 +809,163 @@ class ViewEmailMenu:
         except Exception as e:
             logger.error(f"提取可读内容失败: {e}")
             return (f"内容解析失败: {e}\n\n原始内容:\n{content_str[:300]}...", [])
+
+    def _recall_email(self):
+        """撤回邮件"""
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("🔙 撤回邮件")
+        print("=" * 60)
+
+        # 获取当前账户信息
+        current_account = self.main_cli.get_current_account()
+        if not current_account:
+            print("❌ 未找到当前账户信息，请先登录")
+            input("\n按回车键继续...")
+            return
+
+        current_user_email = current_account["email"]
+
+        # 获取可撤回的邮件列表
+        try:
+            db = self.main_cli.get_db()
+
+            print(f"📧 正在获取您可撤回的邮件列表...")
+            recallable_emails = db.get_recallable_emails(current_user_email)
+
+            if not recallable_emails:
+                print("\n📭 您当前没有可撤回的邮件")
+                print("💡 提示:")
+                print("   • 只能撤回24小时内发送的邮件")
+                print("   • 已撤回的邮件无法再次撤回")
+                print("   • 只能撤回您自己发送的邮件")
+                input("\n按回车键返回...")
+                return
+
+            # 显示可撤回邮件列表
+            print(f"\n📊 可撤回邮件列表 (共 {len(recallable_emails)} 封)")
+            print("-" * 60)
+            print(f"{'ID':<5} {'日期':<20} {'收件人':<30} {'主题':<40}")
+            print("-" * 100)
+
+            for i, email in enumerate(recallable_emails):
+                date = email.get("date", "")
+                # 获取收件人信息
+                to_addrs = email.get("to_addrs", "")
+                if isinstance(to_addrs, list):
+                    recipients = ", ".join(
+                        [str(addr) for addr in to_addrs[:2]]
+                    )  # 最多显示2个收件人
+                    if len(to_addrs) > 2:
+                        recipients += f" (+{len(to_addrs)-2})"
+                else:
+                    recipients = str(to_addrs)
+
+                subject = email.get("subject", "")
+
+                # 解码RFC 2047编码的主题
+                from common.email_header_processor import EmailHeaderProcessor
+
+                if subject:
+                    subject = EmailHeaderProcessor.decode_header_value(subject)
+
+                # 截断过长的字段以适应显示
+                recipients = (
+                    recipients[:28] + ".." if len(recipients) > 30 else recipients
+                )
+                subject = subject[:38] + ".." if len(subject) > 40 else subject
+
+                print(f"{i+1:<5} {date:<20} {recipients:<30} {subject:<40}")
+
+            # 选择要撤回的邮件
+            print("-" * 100)
+            while True:
+                choice = input("\n🔙 请输入要撤回的邮件ID (或按回车返回): ").strip()
+                if not choice:
+                    return
+
+                try:
+                    idx = int(choice) - 1
+                    if 0 <= idx < len(recallable_emails):
+                        email = recallable_emails[idx]
+                        subject = email.get("subject", "(无主题)")
+                        message_id = email.get("message_id")
+
+                        # 解码主题用于显示
+                        from common.email_header_processor import EmailHeaderProcessor
+
+                        display_subject = EmailHeaderProcessor.decode_header_value(
+                            subject
+                        )
+
+                        # 显示详细信息和确认
+                        print(f"\n⚠️  确认撤回操作")
+                        print(f"📧 邮件主题: {display_subject}")
+
+                        # 显示收件人
+                        to_addrs = email.get("to_addrs", [])
+                        if isinstance(to_addrs, list):
+                            print(
+                                f"📨 收件人: {', '.join([str(addr) for addr in to_addrs])}"
+                            )
+                        else:
+                            print(f"📨 收件人: {to_addrs}")
+
+                        print(f"📅 发送时间: {email.get('date', '未知')}")
+                        print("\n🔔 注意: 撤回后收件人将无法查看此邮件内容")
+
+                        confirm = (
+                            input(f"\n❓ 确定要撤回这封邮件吗? (y/N): ").strip().lower()
+                        )
+
+                        if confirm in ["y", "yes"]:
+                            try:
+                                # 执行撤回操作
+                                print("🔄 正在撤回邮件...")
+                                result = db.recall_email(message_id, current_user_email)
+
+                                if result["success"]:
+                                    print(f"✅ {result['message']}")
+                                    print("📧 收件人将无法再查看此邮件")
+
+                                    # 从列表中移除已撤回的邮件
+                                    recallable_emails.pop(idx)
+
+                                    # 如果列表为空，提示用户
+                                    if not recallable_emails:
+                                        print("\n📭 所有可撤回邮件已处理完毕")
+                                        input("\n按回车键返回...")
+                                        return
+
+                                    # 询问是否继续撤回
+                                    continue_choice = (
+                                        input(f"\n❓ 是否继续撤回其他邮件? (y/N): ")
+                                        .strip()
+                                        .lower()
+                                    )
+                                    if continue_choice not in ["y", "yes"]:
+                                        input("\n按回车键返回...")
+                                        return
+
+                                    # 重新显示列表
+                                    break
+                                else:
+                                    print(f"❌ {result['message']}")
+                                    input("\n按回车键继续...")
+                            except Exception as e:
+                                logger.error(f"撤回邮件时出错: {e}")
+                                print(f"❌ 撤回邮件时出错: {e}")
+                                input("\n按回车键继续...")
+                        else:
+                            print("❌ 撤回操作已取消")
+                            input("\n按回车键继续...")
+                            return
+                    else:
+                        print("❌ 无效的邮件ID")
+                except ValueError:
+                    print("❌ 请输入有效的数字")
+
+        except Exception as e:
+            logger.error(f"获取可撤回邮件列表时出错: {e}")
+            print(f"❌ 获取邮件列表时出错: {e}")
+            input("\n按回车键继续...")

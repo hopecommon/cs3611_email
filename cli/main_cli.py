@@ -23,6 +23,7 @@ from .spam_menu import SpamManagementMenu
 # 设置日志
 logger = setup_logging("cli")
 
+
 class EmailCLI:
     """邮件客户端命令行界面"""
 
@@ -279,3 +280,15 @@ class EmailCLI:
     def get_current_account_info(self):
         """获取当前账户信息"""
         return self.settings_menu.get_current_account_config()
+
+    def get_current_account(self):
+        """获取当前账户信息 - 为账户隔离功能提供支持"""
+        account_config = self.settings_menu.get_current_account_config()
+        if account_config:
+            # 返回包含必要字段的账户信息
+            return {
+                "email": account_config["email"],
+                "display_name": account_config.get("display_name", ""),
+                "account_name": self.settings_menu.account_manager.get_default_account(),
+            }
+        return None

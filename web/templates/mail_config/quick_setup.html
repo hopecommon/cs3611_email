@@ -1,0 +1,254 @@
+{% extends "base.html" %} {% block title %}快速设置邮箱 - {{ app_name }}{%
+endblock %} {% block content %}
+<div class="container">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-rocket me-2"></i>快速设置邮箱</h2>
+        <div>
+          <a
+            href="{{ url_for('mail_config.index') }}"
+            class="btn btn-outline-secondary"
+          >
+            <i class="fas fa-arrow-left me-2"></i>返回配置页
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">
+            <i class="fas fa-magic me-2"></i>选择您的邮箱服务商
+          </h5>
+        </div>
+        <div class="card-body">
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+            <div class="mb-4">
+              <label for="provider" class="form-label">邮箱服务商 *</label>
+              {{ form.provider(class="form-select") }}
+              <div class="form-text">
+                选择您的邮箱服务商，我们将为您自动配置SMTP和POP3参数
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="mail_display_name" class="form-label"
+                >显示名称 *</label
+              >
+              {{ form.mail_display_name(class="form-control") }}
+              <div class="form-text">收件人看到的发件人名称</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="email_address" class="form-label">邮箱地址 *</label>
+              {{ form.email_address(class="form-control") }}
+              <div class="form-text">您的完整邮箱地址</div>
+            </div>
+
+            <div class="mb-4">
+              <label for="password" class="form-label">邮箱密码 *</label>
+              {{ form.password(class="form-control") }}
+              <div class="form-text">
+                <strong>注意：</strong>
+                <ul class="small mt-1 mb-0">
+                  <li>Gmail/Outlook: 请使用应用专用密码，而不是登录密码</li>
+                  <li>QQ邮箱: 需要开启SMTP/POP3服务并使用授权码</li>
+                  <li>163/126邮箱: 需要开启客户端授权并使用授权密码</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+              <a
+                href="{{ url_for('mail_config.advanced_setup') }}"
+                class="btn btn-outline-secondary me-md-2"
+              >
+                高级配置
+              </a>
+              {{ form.submit(class="btn btn-primary") }}
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 服务商说明 -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <h6 class="mb-0">
+            <i class="fas fa-info-circle me-2"></i>各服务商配置说明
+          </h6>
+        </div>
+        <div class="card-body">
+          <div class="accordion" id="providerAccordion">
+            <!-- Gmail -->
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="gmailHeading">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#gmailCollapse"
+                >
+                  <i class="fab fa-google me-2"></i>Gmail (Google)
+                </button>
+              </h2>
+              <div
+                id="gmailCollapse"
+                class="accordion-collapse collapse"
+                data-bs-parent="#providerAccordion"
+              >
+                <div class="accordion-body">
+                  <p><strong>配置步骤：</strong></p>
+                  <ol class="small">
+                    <li>启用2步验证 (在Google账户安全设置中)</li>
+                    <li>生成应用专用密码 (用于邮件客户端)</li>
+                    <li>在此处输入您的Gmail地址和应用专用密码</li>
+                  </ol>
+                  <p><strong>服务器信息：</strong></p>
+                  <ul class="small">
+                    <li>SMTP: smtp.gmail.com:587 (TLS)</li>
+                    <li>POP3: pop.gmail.com:995 (SSL)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- Outlook -->
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="outlookHeading">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#outlookCollapse"
+                >
+                  <i class="fab fa-microsoft me-2"></i>Outlook (Microsoft)
+                </button>
+              </h2>
+              <div
+                id="outlookCollapse"
+                class="accordion-collapse collapse"
+                data-bs-parent="#providerAccordion"
+              >
+                <div class="accordion-body">
+                  <p><strong>配置步骤：</strong></p>
+                  <ol class="small">
+                    <li>确保账户启用了2步验证</li>
+                    <li>创建应用密码 (在Microsoft账户安全设置中)</li>
+                    <li>在此处输入您的Outlook地址和应用密码</li>
+                  </ol>
+                  <p><strong>服务器信息：</strong></p>
+                  <ul class="small">
+                    <li>SMTP: smtp-mail.outlook.com:587 (TLS)</li>
+                    <li>POP3: outlook.office365.com:995 (SSL)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- QQ邮箱 -->
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="qqHeading">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#qqCollapse"
+                >
+                  <i class="fab fa-qq me-2"></i>QQ邮箱
+                </button>
+              </h2>
+              <div
+                id="qqCollapse"
+                class="accordion-collapse collapse"
+                data-bs-parent="#providerAccordion"
+              >
+                <div class="accordion-body">
+                  <p><strong>配置步骤：</strong></p>
+                  <ol class="small">
+                    <li>登录QQ邮箱网页版</li>
+                    <li>进入"设置" → "账户" → 开启"POP3/SMTP服务"</li>
+                    <li>获取授权码（通过手机短信验证）</li>
+                    <li>在此处输入QQ邮箱地址和授权码</li>
+                  </ol>
+                  <p><strong>服务器信息：</strong></p>
+                  <ul class="small">
+                    <li>SMTP: smtp.qq.com:587 (TLS)</li>
+                    <li>POP3: pop.qq.com:995 (SSL)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <!-- 163邮箱 -->
+            <div class="accordion-item">
+              <h2 class="accordion-header" id="netease163Heading">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#netease163Collapse"
+                >
+                  <i class="fas fa-envelope me-2"></i>163邮箱
+                </button>
+              </h2>
+              <div
+                id="netease163Collapse"
+                class="accordion-collapse collapse"
+                data-bs-parent="#providerAccordion"
+              >
+                <div class="accordion-body">
+                  <p><strong>配置步骤：</strong></p>
+                  <ol class="small">
+                    <li>登录163邮箱网页版</li>
+                    <li>进入"设置" → "POP3/SMTP/IMAP" → 开启相关服务</li>
+                    <li>设置客户端授权密码</li>
+                    <li>在此处输入163邮箱地址和授权密码</li>
+                  </ol>
+                  <p><strong>服务器信息：</strong></p>
+                  <ul class="small">
+                    <li>SMTP: smtp.163.com:465 (SSL)</li>
+                    <li>POP3: pop.163.com:995 (SSL)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 根据选择的服务商显示相关说明
+  document.addEventListener("DOMContentLoaded", function () {
+    const providerSelect = document.getElementById("provider");
+
+    providerSelect.addEventListener("change", function () {
+      const selectedProvider = this.value;
+
+      // 关闭所有手风琴
+      document.querySelectorAll(".accordion-collapse").forEach((el) => {
+        el.classList.remove("show");
+      });
+
+      // 显示对应的服务商说明
+      if (selectedProvider && selectedProvider !== "custom") {
+        const targetCollapse = document.getElementById(
+          selectedProvider + "Collapse"
+        );
+        if (targetCollapse) {
+          targetCollapse.classList.add("show");
+        }
+      }
+    });
+  });
+</script>
+{% endblock %}

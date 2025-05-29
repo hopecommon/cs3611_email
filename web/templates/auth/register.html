@@ -1,0 +1,116 @@
+{% extends "base.html" %} {% block title %}用户注册 - {{ app_name }}{% endblock
+%} {% block content %}
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow">
+        <div class="card-header bg-success text-white text-center">
+          <h4 class="mb-0"><i class="fas fa-user-plus me-2"></i>用户注册</h4>
+        </div>
+        <div class="card-body">
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div class="mb-3">
+              <label for="username" class="form-label">用户名 *</label>
+              <input
+                type="text"
+                class="form-control"
+                id="username"
+                name="username"
+                placeholder="请输入用户名"
+                required
+                minlength="3"
+              />
+              <div class="form-text">用户名至少3个字符</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="email" class="form-label">邮箱地址 *</label>
+              <input
+                type="email"
+                class="form-control"
+                id="email"
+                name="email"
+                placeholder="请输入邮箱地址"
+                required
+              />
+            </div>
+
+            <div class="mb-3">
+              <label for="full_name" class="form-label">真实姓名</label>
+              <input
+                type="text"
+                class="form-control"
+                id="full_name"
+                name="full_name"
+                placeholder="请输入真实姓名（可选）"
+              />
+            </div>
+
+            <div class="mb-3">
+              <label for="password" class="form-label">密码 *</label>
+              <input
+                type="password"
+                class="form-control"
+                id="password"
+                name="password"
+                placeholder="请输入密码"
+                required
+                minlength="6"
+              />
+              <div class="form-text">密码至少6个字符</div>
+            </div>
+
+            <div class="mb-3">
+              <label for="password_confirm" class="form-label"
+                >确认密码 *</label
+              >
+              <input
+                type="password"
+                class="form-control"
+                id="password_confirm"
+                name="password_confirm"
+                placeholder="请再次输入密码"
+                required
+              />
+            </div>
+
+            <div class="d-grid">
+              <button type="submit" class="btn btn-success">
+                <i class="fas fa-user-plus me-2"></i>注册账户
+              </button>
+            </div>
+          </form>
+        </div>
+        <div class="card-footer text-center">
+          <small class="text-muted">
+            已有账户？
+            <a href="{{ url_for('auth.login') }}" class="text-decoration-none"
+              >立即登录</a
+            >
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 密码确认验证
+  document.addEventListener("DOMContentLoaded", function () {
+    const password = document.getElementById("password");
+    const passwordConfirm = document.getElementById("password_confirm");
+
+    function validatePassword() {
+      if (password.value !== passwordConfirm.value) {
+        passwordConfirm.setCustomValidity("两次输入的密码不一致");
+      } else {
+        passwordConfirm.setCustomValidity("");
+      }
+    }
+
+    password.addEventListener("change", validatePassword);
+    passwordConfirm.addEventListener("keyup", validatePassword);
+  });
+</script>
+{% endblock %}

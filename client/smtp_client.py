@@ -100,7 +100,6 @@ class SMTPClient:
         """
         retry_count = 0
         last_exception = None
-        temp_connection = None
 
         # 确保所有字符串都是 UTF-8 编码
         host = self.host
@@ -116,12 +115,35 @@ class SMTPClient:
             password = str(password) if password is not None else ""
 
         while retry_count < self.max_retries:
+            temp_connection = None
             try:
+                # 特殊处理163邮箱和126邮箱（网易邮箱）
+                is_netease_email = any(
+                    domain in host.lower()
+                    for domain in ["163.com", "126.com", "yeah.net"]
+                )
+
                 if self.use_ssl:
                     context = ssl.create_default_context()
+
+                    if is_netease_email:
+                        # 网易邮箱（163/126）需要特殊的SSL设置
+                        logger.info(f"检测到网易邮箱 ({host})，使用特殊SSL配置")
+                        context.check_hostname = False
+                        context.verify_mode = ssl.CERT_NONE
+
                     temp_connection = smtplib.SMTP_SSL(
                         host, self.port, timeout=self.timeout, context=context
                     )
+
+                    # 网易邮箱需要明确发送EHLO
+                    if is_netease_email:
+                        logger.debug(f"发送EHLO命令给网易邮箱 ({host})")
+                        code, response = temp_connection.ehlo()
+                        if code != 250:
+                            raise smtplib.SMTPConnectError(
+                                code, f"EHLO failed: {response}"
+                            )
                 else:
                     temp_connection = smtplib.SMTP(
                         host, self.port, timeout=self.timeout
@@ -130,6 +152,9 @@ class SMTPClient:
                     # 如果服务器支持STARTTLS，则使用它
                     if temp_connection.has_extn("STARTTLS"):
                         context = ssl.create_default_context()
+                        if is_netease_email:
+                            context.check_hostname = False
+                            context.verify_mode = ssl.CERT_NONE
                         temp_connection.starttls(context=context)
 
                 # 如果提供了认证信息，则进行认证
@@ -145,10 +170,17 @@ class SMTPClient:
 
                     logger.debug(f"服务器支持的认证方法: {auth_methods}")
 
-                    if self.auth_method == "AUTO":
+                    # 网易邮箱（163/126）推荐使用LOGIN认证
+                    if is_netease_email and self.auth_method == "AUTO":
+                        logger.info(f"网易邮箱 ({host}) 自动使用LOGIN认证方法")
+                        actual_auth_method = "LOGIN"
+                    else:
+                        actual_auth_method = self.auth_method
+
+                    if actual_auth_method == "AUTO":
                         # 使用标准登录方法，让smtplib自动选择
                         temp_connection.login(username, password)
-                    elif self.auth_method == "PLAIN":
+                    elif actual_auth_method == "PLAIN":
                         # 使用AUTH PLAIN
                         if not auth_methods or "PLAIN" in auth_methods:
                             # 使用UTF-8编码生成认证字符串
@@ -168,7 +200,7 @@ class SMTPClient:
                         else:
                             logger.warning("服务器不支持PLAIN认证，尝试使用标准登录")
                             temp_connection.login(username, password)
-                    elif self.auth_method == "LOGIN":
+                    elif actual_auth_method == "LOGIN":
                         # 使用AUTH LOGIN
                         if not auth_methods or "LOGIN" in auth_methods:
                             code, response = temp_connection.docmd("AUTH LOGIN")
@@ -197,14 +229,15 @@ class SMTPClient:
                         # 默认使用标准登录
                         temp_connection.login(username, password)
 
-                    logger.info(f"已使用 {self.auth_method} 方法认证: {username}")
+                    logger.info(f"已使用 {actual_auth_method} 方法认证: {username}")
 
                 # 认证成功后，将临时连接赋值给实例变量
                 self.connection = temp_connection
-                temp_connection = None  # 避免在finally中关闭连接
+                temp_connection = None  # 避免在except中关闭连接
 
                 logger.info(f"已连接到SMTP服务器: {host}:{self.port}")
                 return
+
             except (smtplib.SMTPAuthenticationError, smtplib.SMTPException) as e:
                 last_exception = e
                 retry_count += 1
@@ -216,17 +249,34 @@ class SMTPClient:
                         f"QQ邮箱要求使用授权码而非密码登录，请在QQ邮箱设置中获取授权码"
                     )
 
+                # 检查是否是163邮箱特定的错误
+                if "163.com" in host.lower() and "503" in str(e):
+                    logger.warning(
+                        f"163邮箱SMTP连接错误，可能需要使用授权码或检查服务设置"
+                    )
+
                 logger.warning(
                     f"连接SMTP服务器失败 (尝试 {retry_count}/{self.max_retries}): {e}"
                 )
 
-                # 确保临时连接被安全关闭
-                close_ssl_connection_safely(temp_connection)
+                # 安全关闭临时连接
+                if temp_connection:
+                    try:
+                        temp_connection.quit()
+                    except Exception as close_err:
+                        logger.debug(f"关闭临时连接时出错: {close_err}")
+                        # 如果quit()失败，强制关闭
+                        try:
+                            if hasattr(temp_connection, "close"):
+                                temp_connection.close()
+                        except Exception:
+                            pass
 
-                # 如果是认证错误，尝试不同的认证方法
+                # 如果是认证错误，尝试不同的认证方法（但163邮箱优先使用LOGIN）
                 if (
                     isinstance(e, smtplib.SMTPAuthenticationError)
                     and self.auth_method == "AUTO"
+                    and not is_netease_email  # 163邮箱不改变认证方法
                 ):
                     if retry_count == 1:
                         logger.info(f"尝试切换到LOGIN认证方法")
@@ -237,16 +287,20 @@ class SMTPClient:
 
                 # 短暂等待后重试
                 time.sleep(1)
+
             except Exception as e:
-                logger.error(f"连接SMTP服务器失败: {e}")
-                raise
-            finally:
-                # 确保临时连接被关闭
+                # 清理临时连接
                 if temp_connection:
                     try:
                         temp_connection.quit()
-                    except Exception as e:
-                        logger.debug(f"关闭临时连接时出错: {e}")
+                    except Exception:
+                        try:
+                            if hasattr(temp_connection, "close"):
+                                temp_connection.close()
+                        except Exception:
+                            pass
+                logger.error(f"连接SMTP服务器失败: {e}")
+                raise
 
         # 如果所有重试都失败，抛出最后一个异常
         if last_exception:
@@ -362,9 +416,16 @@ class SMTPClient:
         retry_count = 0
         while retry_count < self.max_retries:
             try:
-                # 确保连接已建立
-                if not self.connection:
-                    self.connect()
+                # 针对163邮箱等严格的邮件服务器，每次发送都重新建立连接
+                # 这样可以避免连接状态问题导致的 503 Error: send HELO/EHLO first
+                if self.connection:
+                    try:
+                        self.disconnect()
+                    except Exception as disconnect_err:
+                        logger.debug(f"断开旧连接时出错（忽略）: {disconnect_err}")
+
+                # 重新建立连接
+                self.connect()
 
                 # 使用统一的邮件格式处理器创建MIME消息
                 mime_msg = EmailFormatHandler.create_mime_message(email)
@@ -383,11 +444,18 @@ class SMTPClient:
                 # 发送邮件
                 self.connection.send_message(mime_msg, from_addr, all_recipients)
 
-                # 保存已发送邮件
+                # 保存已发送邮件 - 使用已经创建好的MIME消息内容
                 if self.save_sent_emails:
-                    self._save_sent_email(email)
+                    self._save_sent_email(email, mime_msg)
 
                 logger.info(f"邮件发送成功: {email.subject}")
+
+                # 发送成功后立即断开连接，避免连接状态问题
+                try:
+                    self.disconnect()
+                except Exception as disconnect_err:
+                    logger.debug(f"发送成功后断开连接时出错（忽略）: {disconnect_err}")
+
                 return True
 
             except Exception as e:
@@ -396,14 +464,19 @@ class SMTPClient:
                     f"发送邮件失败 (尝试 {retry_count}/{self.max_retries}): {e}"
                 )
 
+                # 确保连接被清理
+                try:
+                    if self.connection:
+                        self.disconnect()
+                except Exception:
+                    pass
+
                 # 如果是连接相关错误，重新连接
                 if "connection" in str(e).lower() or "timed out" in str(e).lower():
                     try:
-                        self.disconnect()
                         time.sleep(2)  # 等待2秒后重试
-                        self.connect()
                     except Exception as conn_e:
-                        logger.error(f"重新连接失败: {conn_e}")
+                        logger.error(f"等待重试时出错: {conn_e}")
 
                 if retry_count >= self.max_retries:
                     logger.error(f"邮件发送最终失败: {email.subject}")
@@ -411,9 +484,13 @@ class SMTPClient:
 
         return False
 
-    def _save_sent_email(self, email: Email) -> None:
+    def _save_sent_email(self, email: Email, mime_msg=None) -> None:
         """
-        保存已发送邮件 - 统一使用EmailFormatHandler
+        保存已发送邮件 - 使用已创建的MIME消息避免重复格式化
+
+        Args:
+            email: Email对象
+            mime_msg: 已创建的MIME消息对象（可选）
         """
         try:
             # 使用统一的Message ID
@@ -429,8 +506,15 @@ class SMTPClient:
             filename = f"{safe_message_id}.eml"
             filepath = os.path.join(self.sent_emails_dir, filename)
 
-            # 保存为.eml文件 - 使用统一的格式处理器
-            formatted_content = EmailFormatHandler.format_email_for_storage(email)
+            # 优先使用传入的MIME消息，避免重复格式化
+            if mime_msg:
+                # 使用已经创建好的MIME消息内容
+                formatted_content = mime_msg.as_string()
+            else:
+                # 备用方案：重新格式化（为了向后兼容）
+                formatted_content = EmailFormatHandler.format_email_for_storage(email)
+
+            # 保存为.eml文件
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(formatted_content)
 

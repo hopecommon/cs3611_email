@@ -90,6 +90,7 @@ class EmailRepository:
         user_email: Optional[str] = None,
         include_deleted: bool = False,
         include_spam: bool = False,
+        include_recalled: bool = False,
         is_spam: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0,
@@ -101,6 +102,7 @@ class EmailRepository:
             user_email: 用户邮箱（如果指定，只返回发给该用户的邮件）
             include_deleted: 是否包含已删除的邮件
             include_spam: 是否包含垃圾邮件
+            include_recalled: 是否包含已撤回的邮件
             limit: 返回的最大数量
             offset: 偏移量
 
@@ -137,11 +139,15 @@ class EmailRepository:
 
             # 删除状态过滤
             if not include_deleted:
-                query += " AND is_deleted = 0"
+                query += " AND (is_deleted = 0 OR is_deleted IS NULL)"
+
+            # 撤回状态过滤 - 默认隐藏已撤回邮件
+            if not include_recalled:
+                query += " AND (is_recalled = 0 OR is_recalled IS NULL)"
 
             # 垃圾邮件过滤
             if not include_spam:
-                query += " AND is_spam = 0"
+                query += " AND (is_spam = 0 OR is_spam IS NULL)"
 
             # is_spam 过滤条件
             if is_spam is not None:
@@ -259,6 +265,7 @@ class EmailRepository:
             # 转换布尔值为整数
             data["has_attachments"] = 1 if data["has_attachments"] else 0
             data["is_read"] = 1 if data["is_read"] else 0
+            data["is_spam"] = 1 if data["is_spam"] else 0
 
             # 插入数据
             success = self.db.execute_insert("sent_emails", data)
@@ -321,10 +328,12 @@ class EmailRepository:
             query = "SELECT * FROM sent_emails WHERE 1=1"
             params = []
 
-            # 发件人过滤
+            # 发件人过滤 - 支持模糊匹配，以处理"显示名 <邮箱>"格式
             if from_addr:
-                query += " AND from_addr = ?"
-                params.append(from_addr)
+                logger.debug(f"LIST_SENT_EMAILS: Filtering by from_addr: '{from_addr}'")
+                # 同时支持精确匹配和包含匹配
+                query += " AND (from_addr = ? OR from_addr LIKE ?)"
+                params.extend([from_addr, f"%{from_addr}%"])
 
             # 垃圾邮件过滤
             if not include_spam:
@@ -344,13 +353,20 @@ class EmailRepository:
 
             # 转换为SentEmailRecord对象
             sent_email_records = []
-            for result in results:
-                try:
-                    sent_email_record = SentEmailRecord.from_dict(result)
-                    sent_email_records.append(sent_email_record)
-                except Exception as e:
-                    logger.warning(f"解析已发送邮件记录时出错: {e}")
-                    continue
+            logger.debug(
+                f"LIST_SENT_EMAILS: Found {len(results) if results else 0} records from DB for query: {query} with params: {params}"
+            )
+            if results:
+                for result_dict in results:
+                    try:
+                        logger.debug(
+                            f"LIST_SENT_EMAILS: DB row from_addr: '{result_dict.get('from_addr')}', date: '{result_dict.get('date')}'"
+                        )
+                        sent_email_record = SentEmailRecord.from_dict(result_dict)
+                        sent_email_records.append(sent_email_record)
+                    except Exception as e:
+                        logger.warning(f"解析已发送邮件记录时出错: {e}")
+                        continue
 
             return sent_email_records
         except Exception as e:
@@ -434,9 +450,9 @@ class EmailRepository:
 
                     # 添加删除和垃圾邮件过滤
                     if not include_deleted:
-                        sql_query += " AND is_deleted = 0"
+                        sql_query += " AND (is_deleted = 0 OR is_deleted IS NULL)"
                     if not include_spam:
-                        sql_query += " AND is_spam = 0"
+                        sql_query += " AND (is_spam = 0 OR is_spam IS NULL)"
 
                     # 添加排序和限制
                     sql_query += " ORDER BY date DESC LIMIT ?"
@@ -446,7 +462,8 @@ class EmailRepository:
                     received_results = self.db.execute_query(
                         sql_query, tuple(params), fetch_all=True
                     )
-                    results.extend(received_results)
+                    if received_results:
+                        results.extend(received_results)
 
             # 搜索已发送邮件
             if include_sent:
@@ -465,6 +482,10 @@ class EmailRepository:
                         WHERE ({' OR '.join(query_parts)})
                     """
 
+                    # 垃圾邮件过滤
+                    if not include_spam:
+                        sql_query += " AND (is_spam = 0 OR is_spam IS NULL)"
+
                     # 添加排序和限制
                     sql_query += " ORDER BY date DESC LIMIT ?"
                     params.append(limit)
@@ -473,7 +494,8 @@ class EmailRepository:
                     sent_results = self.db.execute_query(
                         sql_query, tuple(params), fetch_all=True
                     )
-                    results.extend(sent_results)
+                    if sent_results:
+                        results.extend(sent_results)
 
             # 按日期排序并限制结果数量
             results.sort(key=lambda x: x.get("date", ""), reverse=True)
@@ -523,3 +545,113 @@ class EmailRepository:
         except Exception as e:
             logger.error(f"更新已发送邮件状态时出错: {e}")
             return False
+
+    def recall_email(self, message_id: str, recalled_by: str) -> bool:
+        """
+        撤回邮件（服务器端操作）
+
+        Args:
+            message_id: 邮件ID
+            recalled_by: 撤回操作者
+
+        Returns:
+            bool: 操作是否成功
+        """
+        try:
+            import datetime
+
+            recalled_at = datetime.datetime.now().isoformat()
+
+            # 同时更新收件箱和已发送邮件的撤回状态
+            updates = {
+                "is_recalled": 1,
+                "recalled_at": recalled_at,
+                "recalled_by": recalled_by,
+            }
+
+            # 更新收件箱中的邮件（对收件人隐藏）
+            emails_success = self.db.execute_update(
+                "emails", updates, "message_id = ?", (message_id,)
+            )
+
+            # 更新已发送邮件的状态（显示撤回状态）
+            sent_emails_success = self.db.execute_update(
+                "sent_emails", updates, "message_id = ?", (message_id,)
+            )
+
+            # 只要有一个更新成功就算成功（邮件可能只在一个表中）
+            success = emails_success or sent_emails_success
+
+            if success:
+                logger.info(f"邮件已撤回: {message_id} by {recalled_by}")
+            else:
+                logger.warning(f"邮件撤回失败，可能邮件不存在: {message_id}")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"撤回邮件时出错: {e}")
+            return False
+
+    def can_recall_email(self, message_id: str, user_email: str) -> Dict[str, Any]:
+        """
+        检查邮件是否可以撤回
+
+        Args:
+            message_id: 邮件ID
+            user_email: 用户邮箱
+
+        Returns:
+            Dict包含can_recall(bool)和reason(str)
+        """
+        try:
+            # 检查是否为该用户发送的邮件
+            sent_email = self.get_sent_email_by_id(message_id)
+
+            if not sent_email:
+                return {"can_recall": False, "reason": "邮件不存在或不是您发送的邮件"}
+
+            # 检查发件人是否匹配
+            from_addr = sent_email.from_addr
+            if not self._is_user_email_match(from_addr, user_email):
+                return {"can_recall": False, "reason": "只能撤回自己发送的邮件"}
+
+            # 检查是否已经撤回
+            if sent_email.is_recalled:
+                return {"can_recall": False, "reason": "邮件已经撤回过了"}
+
+            # 检查邮件发送时间（可选：限制撤回时间窗口）
+            import datetime
+
+            now = datetime.datetime.now()
+            email_date = sent_email.date
+
+            # 设置撤回时间窗口为24小时
+            time_limit = datetime.timedelta(hours=24)
+            if now - email_date > time_limit:
+                return {"can_recall": False, "reason": "邮件发送超过24小时，无法撤回"}
+
+            return {"can_recall": True, "reason": "可以撤回"}
+
+        except Exception as e:
+            logger.error(f"检查邮件撤回权限时出错: {e}")
+            return {"can_recall": False, "reason": f"检查失败: {e}"}
+
+    def _is_user_email_match(self, email_field, user_email):
+        """检查邮件地址字段是否匹配用户邮箱"""
+        if not email_field or not user_email:
+            return False
+
+        # 转换为字符串进行比较
+        email_str = str(email_field).lower()
+        user_email_lower = user_email.lower()
+
+        # 支持多种格式：
+        # 1. 直接匹配: user@domain.com
+        # 2. 显示名格式: Name <user@domain.com>
+        # 3. JSON格式中的部分匹配
+        return (
+            user_email_lower in email_str
+            or email_str == user_email_lower
+            or f"<{user_email_lower}>" in email_str
+        )

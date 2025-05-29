@@ -1,0 +1,197 @@
+{% extends "base.html" %} {% block title %}邮箱仪表板 - {{ app_name }}{%
+endblock %} {% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-tachometer-alt me-2"></i>邮箱仪表板</h2>
+        <div class="d-flex gap-2">
+          <a href="{{ url_for('email.compose') }}" class="btn btn-primary">
+            <i class="fas fa-edit me-1"></i>写邮件
+          </a>
+          <a
+            href="{{ url_for('email_auth.logout') }}"
+            class="btn btn-outline-secondary"
+          >
+            <i class="fas fa-sign-out-alt me-1"></i>退出
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户信息 -->
+  <div class="row mb-4">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title"><i class="fas fa-user me-2"></i>账户信息</h5>
+          <div class="row">
+            <div class="col-md-4">
+              <strong>邮箱地址：</strong><br />
+              <span class="text-primary">{{ user_info.email }}</span>
+            </div>
+            <div class="col-md-4">
+              <strong>邮箱服务商：</strong><br />
+              <span class="badge bg-info">{{ user_info.provider }}</span>
+            </div>
+            <div class="col-md-4">
+              <strong>登录时间：</strong><br />
+              <span class="text-muted">{{ user_info.login_time }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接状态 -->
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5 class="card-title">
+            <i class="fas fa-paper-plane me-2"></i>发送邮件
+          </h5>
+          {% if smtp_ok %}
+          <div class="text-success">
+            <i class="fas fa-check-circle fa-2x"></i>
+            <p class="mt-2">SMTP 连接正常</p>
+          </div>
+          {% else %}
+          <div class="text-warning">
+            <i class="fas fa-exclamation-triangle fa-2x"></i>
+            <p class="mt-2">SMTP 连接异常</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body text-center">
+          <h5 class="card-title"><i class="fas fa-inbox me-2"></i>接收邮件</h5>
+          {% if pop3_ok %}
+          <div class="text-success">
+            <i class="fas fa-check-circle fa-2x"></i>
+            <p class="mt-2">POP3 连接正常</p>
+          </div>
+          {% else %}
+          <div class="text-warning">
+            <i class="fas fa-exclamation-triangle fa-2x"></i>
+            <p class="mt-2">POP3 连接异常</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 邮件统计 -->
+  <div class="row mb-4">
+    <div class="col-md-4">
+      <div class="card bg-primary text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h5>总邮件</h5>
+              <h2>{{ email_stats.total }}</h2>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-envelope fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-warning text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h5>未读邮件</h5>
+              <h2>{{ email_stats.unread }}</h2>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-envelope-open fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card bg-success text-white">
+        <div class="card-body">
+          <div class="d-flex justify-content-between">
+            <div>
+              <h5>今日邮件</h5>
+              <h2>{{ email_stats.today }}</h2>
+            </div>
+            <div class="align-self-center">
+              <i class="fas fa-calendar-day fa-2x"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 快速操作 -->
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>快速操作</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <a
+                href="{{ url_for('email.inbox') }}"
+                class="btn btn-outline-primary btn-lg w-100 mb-2"
+              >
+                <i class="fas fa-inbox d-block fa-2x mb-2"></i>
+                收件箱
+              </a>
+            </div>
+            <div class="col-md-3">
+              <a
+                href="{{ url_for('email.compose') }}"
+                class="btn btn-outline-success btn-lg w-100 mb-2"
+              >
+                <i class="fas fa-edit d-block fa-2x mb-2"></i>
+                写邮件
+              </a>
+            </div>
+            <div class="col-md-3">
+              <a
+                href="{{ url_for('email.sent') }}"
+                class="btn btn-outline-info btn-lg w-100 mb-2"
+              >
+                <i class="fas fa-paper-plane d-block fa-2x mb-2"></i>
+                已发送
+              </a>
+            </div>
+            <div class="col-md-3">
+              <a
+                href="{{ url_for('mail_config.index') }}"
+                class="btn btn-outline-secondary btn-lg w-100 mb-2"
+              >
+                <i class="fas fa-cog d-block fa-2x mb-2"></i>
+                邮箱配置
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    // 可以添加一些动态功能，比如定时刷新邮件统计
+    console.log("邮箱仪表板已加载");
+  });
+</script>
+{% endblock %}

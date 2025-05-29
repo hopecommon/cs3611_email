@@ -1,0 +1,121 @@
+{% extends "base.html" %} {% block title %}收件箱 - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>
+          <i class="fas fa-inbox me-2"></i>收件箱 {% if total > 0 %}
+          <small class="text-muted">({{ total }} 封邮件)</small>
+          {% endif %}
+        </h2>
+        <div>
+          <a
+            href="{{ url_for('email.refresh_inbox') }}"
+            class="btn btn-success me-2"
+          >
+            <i class="fas fa-sync-alt me-1"></i>刷新邮件
+          </a>
+          <a href="{{ url_for('email.compose') }}" class="btn btn-primary">
+            <i class="fas fa-edit me-2"></i>写邮件
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body p-0">
+          {% if emails %} {% for email in emails %}
+          <div
+            class="email-item {% if not email.is_read %}unread{% endif %} {% if email.is_spam %}spam{% endif %}"
+          >
+            <div class="row align-items-center">
+              <div class="col-md-1">
+                <input
+                  type="checkbox"
+                  class="form-check-input"
+                  value="{{ email.message_id }}"
+                />
+              </div>
+              <div class="col-md-3">
+                <strong>{{ email.from_addr }}</strong>
+                {% if email.is_spam %}
+                <span class="badge bg-danger ms-2">垃圾邮件</span>
+                {% endif %} {% if not email.is_read %}
+                <span class="badge bg-warning ms-2">未读</span>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <a
+                  href="{{ url_for('email.view', message_id=email.message_id) }}"
+                  class="text-decoration-none text-dark"
+                >
+                  {{ email.subject or '(无主题)' }}
+                </a>
+              </div>
+              <div class="col-md-2 text-end">
+                <small class="text-muted">
+                  {% if email.date %} {{ email.date.strftime('%m-%d %H:%M') }}
+                  {% endif %}
+                </small>
+              </div>
+            </div>
+          </div>
+          {% endfor %} {% else %}
+          <div class="text-center py-5">
+            <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">收件箱为空</h5>
+            <p class="text-muted">您还没有收到任何邮件</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- 分页 -->
+      {% if total > per_page %}
+      <nav aria-label="邮件分页" class="mt-4">
+        <ul class="pagination justify-content-center">
+          {% set total_pages = (total + per_page - 1) // per_page %} {% if page
+          > 1 %}
+          <li class="page-item">
+            <a
+              class="page-link"
+              href="{{ url_for('email.inbox', page=page-1) }}"
+              >上一页</a
+            >
+          </li>
+          {% endif %} {% for p in range(1, total_pages + 1) %} {% if p == page
+          %}
+          <li class="page-item active">
+            <span class="page-link">{{ p }}</span>
+          </li>
+          {% elif p <= 3 or p >= total_pages - 2 or (p >= page - 2 and p <= page
+          + 2) %}
+          <li class="page-item">
+            <a class="page-link" href="{{ url_for('email.inbox', page=p) }}"
+              >{{ p }}</a
+            >
+          </li>
+          {% elif p == 4 or p == total_pages - 3 %}
+          <li class="page-item disabled">
+            <span class="page-link">...</span>
+          </li>
+          {% endif %} {% endfor %} {% if page < total_pages %}
+          <li class="page-item">
+            <a
+              class="page-link"
+              href="{{ url_for('email.inbox', page=page+1) }}"
+              >下一页</a
+            >
+          </li>
+          {% endif %}
+        </ul>
+      </nav>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

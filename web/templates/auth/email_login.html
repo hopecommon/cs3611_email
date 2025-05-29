@@ -1,0 +1,282 @@
+{% extends "base.html" %} {% block title %}邮箱登录 - {{ app_name }}{% endblock
+%} {% block content %}
+<div class="container">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card shadow">
+        <div class="card-header bg-primary text-white text-center">
+          <h4 class="mb-0"><i class="fas fa-envelope me-2"></i>邮箱登录</h4>
+          <small class="text-light">直接使用您的邮箱账户登录</small>
+        </div>
+        <div class="card-body">
+          <!-- 错误提示 -->
+          {% with messages = get_flashed_messages(with_categories=true) %} {% if
+          messages %} {% for category, message in messages %}
+          <div
+            class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show"
+            role="alert"
+          >
+            {{ message }}
+            <button
+              type="button"
+              class="btn-close"
+              data-bs-dismiss="alert"
+            ></button>
+          </div>
+          {% endfor %} {% endif %} {% endwith %}
+
+          <form method="POST" id="emailLoginForm">
+            <!-- CSRF Token -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+            <!-- 邮箱地址 -->
+            <div class="mb-3">
+              <label for="email" class="form-label">
+                <i class="fas fa-envelope me-1"></i>邮箱地址
+              </label>
+              <input
+                type="email"
+                class="form-control"
+                id="email"
+                name="email"
+                placeholder="your_email@qq.com"
+                required
+                autofocus
+              />
+              <div class="form-text">
+                支持 QQ、Gmail、163、Outlook 等主流邮箱
+              </div>
+            </div>
+
+            <!-- 密码/授权码 -->
+            <div class="mb-3">
+              <label for="password" class="form-label">
+                <i class="fas fa-key me-1"></i>密码/授权码
+              </label>
+              <div class="input-group">
+                <input
+                  type="password"
+                  class="form-control"
+                  id="password"
+                  name="password"
+                  placeholder="请输入授权码（不是邮箱密码）"
+                  required
+                />
+                <button
+                  class="btn btn-outline-secondary"
+                  type="button"
+                  id="togglePassword"
+                >
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+              <div class="form-text" id="passwordHint">
+                大部分邮箱需要使用授权码，不是邮箱登录密码
+              </div>
+            </div>
+
+            <!-- 邮箱服务商信息 -->
+            <div class="mb-3" id="providerInfo" style="display: none">
+              <div class="alert alert-info" role="alert">
+                <h6 class="alert-heading mb-2">
+                  <i class="fas fa-info-circle"></i>
+                  <span id="providerName"></span>
+                </h6>
+                <p class="mb-1" id="authNote"></p>
+                <a
+                  href="#"
+                  id="helpLink"
+                  target="_blank"
+                  class="btn btn-sm btn-outline-info"
+                >
+                  <i class="fas fa-external-link-alt"></i> 获取授权码帮助
+                </a>
+              </div>
+            </div>
+
+            <!-- 记住登录 -->
+            <div class="mb-3 form-check">
+              <input
+                type="checkbox"
+                class="form-check-input"
+                id="remember"
+                name="remember"
+                checked
+              />
+              <label class="form-check-label" for="remember">
+                记住此邮箱配置
+              </label>
+            </div>
+
+            <!-- 登录按钮 -->
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary" id="loginBtn">
+                <span
+                  class="spinner-border spinner-border-sm me-2"
+                  style="display: none"
+                  id="loadingSpinner"
+                ></span>
+                <i class="fas fa-sign-in-alt me-2"></i>
+                连接邮箱
+              </button>
+            </div>
+          </form>
+
+          <!-- 最近登录的账户 -->
+          {% if recent_accounts %}
+          <hr class="my-4" />
+          <h6 class="text-muted mb-3">
+            <i class="fas fa-history me-1"></i>最近登录
+          </h6>
+          <div class="row">
+            {% for account in recent_accounts %}
+            <div class="col-md-6 mb-2">
+              <div class="card border-light">
+                <div class="card-body p-2">
+                  <small class="text-muted">{{ account.provider_name }}</small>
+                  <div
+                    class="d-flex justify-content-between align-items-center"
+                  >
+                    <span class="text-truncate">{{ account.email }}</span>
+                    <button
+                      class="btn btn-sm btn-outline-primary quick-login"
+                      data-email="{{ account.email }}"
+                    >
+                      <i class="fas fa-arrow-right"></i>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+        <div class="card-footer text-center text-muted">
+          <small>
+            <i class="fas fa-shield-alt me-1"></i>
+            您的邮箱密码使用加密存储，安全可靠
+          </small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const emailInput = document.getElementById("email");
+    const passwordInput = document.getElementById("password");
+    const providerInfo = document.getElementById("providerInfo");
+    const providerName = document.getElementById("providerName");
+    const authNote = document.getElementById("authNote");
+    const helpLink = document.getElementById("helpLink");
+    const passwordHint = document.getElementById("passwordHint");
+    const togglePassword = document.getElementById("togglePassword");
+    const form = document.getElementById("emailLoginForm");
+    const loginBtn = document.getElementById("loginBtn");
+    const loadingSpinner = document.getElementById("loadingSpinner");
+
+    // 邮箱服务商配置
+    const providers = {
+      "qq.com": {
+        name: "QQ邮箱",
+        authNote:
+          "需要使用授权码，不是QQ密码。在QQ邮箱设置→账户→开启SMTP服务获取授权码。",
+        helpUrl:
+          "https://service.mail.qq.com/cgi-bin/help?subtype=1&&id=28&&no=1001256",
+      },
+      "gmail.com": {
+        name: "Gmail",
+        authNote: "需要开启两步验证并使用应用专用密码，不是Google账户密码。",
+        helpUrl: "https://support.google.com/mail/answer/7126229",
+      },
+      "outlook.com": {
+        name: "Outlook.com",
+        authNote: "需要在账户设置中启用POP/IMAP，可以使用账户密码或应用密码。",
+        helpUrl:
+          "https://support.microsoft.com/zh-cn/office/outlook-com-pop-imap-smtp-设置-d088b986-291d-42b8-9564-9c414e2aa040",
+      },
+      "hotmail.com": {
+        name: "Hotmail",
+        authNote: "需要在账户设置中启用POP/IMAP，可以使用账户密码或应用密码。",
+        helpUrl:
+          "https://support.microsoft.com/zh-cn/office/outlook-com-pop-imap-smtp-设置-d088b986-291d-42b8-9564-9c414e2aa040",
+      },
+      "163.com": {
+        name: "网易163邮箱",
+        authNote: "需要开启SMTP/POP3服务并使用授权码，不是网易账户密码。",
+        helpUrl:
+          "https://help.mail.163.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e49998b374173cfe9171312",
+      },
+      "126.com": {
+        name: "网易126邮箱",
+        authNote: "需要开启SMTP/POP3服务并使用授权码，不是网易账户密码。",
+        helpUrl:
+          "https://help.mail.163.com/faqDetail.do?code=d7a5dc8471cd0c0e8b4b8f4f8e49998b374173cfe9171312",
+      },
+    };
+
+    // 邮箱输入变化时显示服务商信息
+    emailInput.addEventListener("input", function () {
+      const email = this.value.trim();
+      if (email.includes("@")) {
+        const domain = email.split("@")[1].toLowerCase();
+        const provider = providers[domain];
+
+        if (provider) {
+          providerName.textContent = provider.name;
+          authNote.textContent = provider.authNote;
+          helpLink.href = provider.helpUrl;
+          providerInfo.style.display = "block";
+          passwordHint.textContent = "请输入授权码（不是邮箱登录密码）";
+        } else {
+          providerInfo.style.display = "none";
+          passwordHint.textContent = "请输入邮箱密码或授权码";
+        }
+      } else {
+        providerInfo.style.display = "none";
+        passwordHint.textContent = "大部分邮箱需要使用授权码，不是邮箱登录密码";
+      }
+    });
+
+    // 切换密码显示
+    togglePassword.addEventListener("click", function () {
+      const type =
+        passwordInput.getAttribute("type") === "password" ? "text" : "password";
+      passwordInput.setAttribute("type", type);
+      this.innerHTML =
+        type === "password"
+          ? '<i class="fas fa-eye"></i>'
+          : '<i class="fas fa-eye-slash"></i>';
+    });
+
+    // 表单提交
+    form.addEventListener("submit", function (e) {
+      const email = emailInput.value.trim();
+      const password = passwordInput.value.trim();
+
+      if (!email || !password) {
+        e.preventDefault();
+        return;
+      }
+
+      // 显示加载状态
+      loginBtn.disabled = true;
+      loadingSpinner.style.display = "inline-block";
+      loginBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-2"></span>正在连接邮箱...';
+    });
+
+    // 快速登录
+    document.querySelectorAll(".quick-login").forEach((button) => {
+      button.addEventListener("click", function () {
+        const email = this.getAttribute("data-email");
+        emailInput.value = email;
+        emailInput.dispatchEvent(new Event("input"));
+        passwordInput.focus();
+      });
+    });
+  });
+</script>
+{% endblock %}

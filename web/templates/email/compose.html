@@ -1,0 +1,219 @@
+{% extends "base.html" %} {% block title %}写邮件 - {{ app_name }}{% endblock %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-edit me-2"></i>写邮件</h2>
+        <div>
+          <a
+            href="{{ url_for('email.inbox') }}"
+            class="btn btn-outline-secondary"
+          >
+            <i class="fas fa-arrow-left me-2"></i>返回收件箱
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0"><i class="fas fa-envelope me-2"></i>新邮件</h5>
+        </div>
+        <div class="card-body">
+          <form method="POST" enctype="multipart/form-data">
+            <!-- CSRF Token -->
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label fw-bold">收件人 *</label>
+              </div>
+              <div class="col-md-10">
+                <input
+                  type="email"
+                  name="to_addresses"
+                  class="form-control"
+                  placeholder="收件人邮箱地址，多个地址用逗号分隔"
+                  required
+                />
+                <div class="form-text">支持多个收件人，用逗号分隔</div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label">抄送</label>
+              </div>
+              <div class="col-md-10">
+                <input
+                  type="email"
+                  name="cc_addresses"
+                  class="form-control"
+                  placeholder="抄送邮箱地址（可选）"
+                />
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label">密送</label>
+              </div>
+              <div class="col-md-10">
+                <input
+                  type="email"
+                  name="bcc_addresses"
+                  class="form-control"
+                  placeholder="密送邮箱地址（可选）"
+                />
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label fw-bold">主题 *</label>
+              </div>
+              <div class="col-md-10">
+                <input
+                  type="text"
+                  name="subject"
+                  class="form-control"
+                  placeholder="邮件主题"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label">内容类型</label>
+              </div>
+              <div class="col-md-10">
+                <select name="content_type" class="form-select">
+                  <option value="html">HTML富文本</option>
+                  <option value="text">纯文本</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label fw-bold">邮件内容 *</label>
+              </div>
+              <div class="col-md-10">
+                <textarea
+                  name="content"
+                  class="form-control"
+                  rows="15"
+                  placeholder="请输入邮件内容..."
+                  required
+                ></textarea>
+                <div class="form-text">
+                  支持HTML格式，如
+                  &lt;b&gt;粗体&lt;/b&gt;、&lt;i&gt;斜体&lt;/i&gt; 等
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-3">
+              <div class="col-md-2">
+                <label class="form-label">附件</label>
+              </div>
+              <div class="col-md-10">
+                <input
+                  type="file"
+                  name="attachments"
+                  class="form-control"
+                  multiple
+                />
+                <div class="form-text">
+                  支持的文件类型: jpg, png, gif, pdf, doc, docx, txt,
+                  zip（最大32MB）
+                </div>
+              </div>
+            </div>
+
+            <div class="row mb-4">
+              <div class="col-md-2">
+                <label class="form-label">优先级</label>
+              </div>
+              <div class="col-md-10">
+                <select name="priority" class="form-select">
+                  <option value="normal">普通</option>
+                  <option value="high">高</option>
+                  <option value="low">低</option>
+                </select>
+              </div>
+            </div>
+
+            <hr />
+
+            <div class="row">
+              <div class="col-12">
+                <div class="d-flex justify-content-between">
+                  <div>
+                    <button
+                      type="submit"
+                      name="action"
+                      value="send"
+                      class="btn btn-primary btn-lg"
+                    >
+                      <i class="fas fa-paper-plane me-2"></i>发送邮件
+                    </button>
+                    <button
+                      type="submit"
+                      name="action"
+                      value="draft"
+                      class="btn btn-secondary btn-lg"
+                    >
+                      <i class="fas fa-save me-2"></i>保存草稿
+                    </button>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      class="btn btn-outline-danger"
+                      onclick="clearForm()"
+                    >
+                      <i class="fas fa-trash me-2"></i>清空
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function clearForm() {
+    if (confirm("确定要清空表单内容吗？")) {
+      document.querySelector("form").reset();
+    }
+  }
+
+  // 动态显示字数统计
+  document.addEventListener("DOMContentLoaded", function () {
+    const contentTextarea = document.querySelector('textarea[name="content"]');
+    const subjectInput = document.querySelector('input[name="subject"]');
+
+    // 添加字数统计
+    if (contentTextarea) {
+      const countDiv = document.createElement("div");
+      countDiv.className = "text-end text-muted mt-1";
+      countDiv.innerHTML = '<small>字数: <span id="charCount">0</span></small>';
+      contentTextarea.parentNode.appendChild(countDiv);
+
+      contentTextarea.addEventListener("input", function () {
+        document.getElementById("charCount").textContent = this.value.length;
+      });
+    }
+  });
+</script>
+{% endblock %}
