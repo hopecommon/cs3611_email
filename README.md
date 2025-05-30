@@ -102,7 +102,7 @@ python -m client.pop3_cli \
 ### 优先级顺序
 1. **命令行参数**（最高优先级）
 2. 配置文件
-3. 环境变量  
+3. 环境变量
 4. 默认值
 
 ### 智能SSL推断
@@ -122,7 +122,7 @@ python -m client.pop3_cli --port 8110 --username test
 **修复后的正确行为**：
 ```bash
 # 现在正确使用用户指定的端口
-python -m client.pop3_cli --port 8110 --username test  
+python -m client.pop3_cli --port 8110 --username test
 # 实际连接到: localhost:8110 (尊重用户指定的端口)
 ```
 
@@ -182,9 +182,23 @@ python tests/performance/test_high_concurrency.py
 
 ## 文档
 
-- [用户指南](docs/user_guide/)
-- [API文档](docs/api/)
-- [开发指南](docs/development/)
+### 📚 核心文档
+- **[项目架构文档](PROJECT_ARCHITECTURE.md)** - 完整的技术架构和实现细节
+- [用户手册](docs/user_manual.md) - 详细的使用指南
+- [开发者指南](docs/developer_guide.md) - 开发和扩展指南
+- [测试指南](docs/testing_guide.md) - 测试运行和编写指南
+
+### 🔧 技术文档
+- [依赖说明](docs/dependencies.md) - 依赖库详细说明
+- [安全指南](docs/email_security_guide.md) - 邮件安全最佳实践
+- [Web界面指南](docs/WEB_INTERFACE_GUIDE.md) - Web界面使用说明
+- [现代CLI指南](docs/MODERN_CLI_GUIDE.md) - CLI界面使用说明
+
+### 📋 参考文档
+- [SMTP协议参考](docs/smtp_protocol_reference.md)
+- [POP3协议参考](docs/pop3_protocol_reference.md)
+- [RFC 5322合规性审计](docs/RFC_5322_COMPLIANCE_AUDIT.md)
+- [客户端服务器架构](docs/client_server_architecture.md)
 
 ## 许可证
 
