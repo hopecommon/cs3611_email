@@ -4,7 +4,7 @@
 邮箱认证路由 - 处理邮箱直接登录
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 
 import sys
@@ -32,14 +32,21 @@ def email_login():
         # 暂时注释掉自动重定向
         # return redirect(url_for("main.dashboard"))
 
-    # 获取最近登录的账户
+    # 获取最近登录的账户和记住的邮箱
     try:
         authenticator = EmailAuthenticator()
         recent_accounts = authenticator.list_saved_accounts()[:4]  # 最多显示4个
         print(f"📋 获取到 {len(recent_accounts)} 个最近账户")
+
+        # 获取记住的邮箱地址
+        last_email = session.get("remembered_email", "")
+        remember_email = session.get("remember_email", False)
+        print(f"📧 记住的邮箱: {last_email}, 记住状态: {remember_email}")
     except Exception as e:
         print(f"❌ 获取最近账户失败: {e}")
         recent_accounts = []
+        last_email = ""
+        remember_email = False
 
     if request.method == "POST":
         print("📝 处理登录表单提交")
@@ -51,13 +58,19 @@ def email_login():
         if not email or not password:
             flash("请输入邮箱地址和密码", "error")
             return render_template(
-                "auth/email_login.html", recent_accounts=recent_accounts
+                "auth/email_login.html",
+                recent_accounts=recent_accounts,
+                last_email=last_email,
+                remember_email=remember_email,
             )
 
         if "@" not in email:
             flash("请输入有效的邮箱地址", "error")
             return render_template(
-                "auth/email_login.html", recent_accounts=recent_accounts
+                "auth/email_login.html",
+                recent_accounts=recent_accounts,
+                last_email=last_email,
+                remember_email=remember_email,
             )
 
         # 检查是否支持该邮箱服务商
@@ -65,7 +78,10 @@ def email_login():
             domain = email.split("@")[1]
             flash(f"暂不支持 {domain} 邮箱，请联系管理员添加支持", "error")
             return render_template(
-                "auth/email_login.html", recent_accounts=recent_accounts
+                "auth/email_login.html",
+                recent_accounts=recent_accounts,
+                last_email=last_email,
+                remember_email=remember_email,
             )
 
         # 进行邮箱认证
@@ -76,6 +92,17 @@ def email_login():
                 # 登录成功
                 print(f"✅ 邮箱认证成功: {email}")
                 login_user(user, remember=remember)
+
+                # 保存邮箱地址到session（如果用户选择记住）
+                if remember:
+                    session["remembered_email"] = email
+                    session["remember_email"] = True
+                    print(f"💾 已保存邮箱地址到session: {email}")
+                else:
+                    session.pop("remembered_email", None)
+                    session.pop("remember_email", None)
+                    print("🗑️ 已清除session中的邮箱地址")
+
                 provider_config = get_provider_config(email)
                 flash(f"欢迎使用 {provider_config['name']} 邮箱！", "success")
 
@@ -97,7 +124,12 @@ def email_login():
             flash(f"登录过程中出现错误：{str(e)}", "error")
 
     print("📄 显示邮箱登录页面")
-    return render_template("auth/email_login.html", recent_accounts=recent_accounts)
+    return render_template(
+        "auth/email_login.html",
+        recent_accounts=recent_accounts,
+        last_email=last_email,
+        remember_email=remember_email,
+    )
 
 
 @email_auth_bp.route("/clear_session")
@@ -123,7 +155,22 @@ def clear_session():
 @login_required
 def logout():
     """用户登出"""
+    # 检查是否需要保留邮箱地址
+    keep_email = session.get("remember_email", False)
+    remembered_email = session.get("remembered_email", "")
+
     logout_user()
+
+    # 清除session但保留邮箱地址（如果用户选择记住）
+    if keep_email and remembered_email:
+        session.clear()
+        session["remembered_email"] = remembered_email
+        session["remember_email"] = True
+        print(f"🔄 登出但保留邮箱地址: {remembered_email}")
+    else:
+        session.clear()
+        print("🗑️ 登出并清除所有session数据")
+
     flash("您已成功登出", "info")
     return redirect(url_for("email_auth.email_login"))
 

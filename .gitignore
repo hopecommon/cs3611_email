@@ -203,3 +203,5 @@ pgp/
 .cursor/
 test_output/
 attachments/
+tools/mitm_data/
+tools/MITM_DEMO_README.md

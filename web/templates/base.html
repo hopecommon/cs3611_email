@@ -76,17 +76,24 @@
                 role="button"
                 data-bs-toggle="dropdown"
               >
-                <i class="fas fa-user me-1"></i>{{ current_user.full_name }}
+                <i class="fas fa-user me-1"></i>{{ current_user.email if
+                hasattr(current_user, 'email') else current_user.username }}
               </a>
               <ul class="dropdown-menu">
                 <li>
-                  <a class="dropdown-item" href="{{ url_for('auth.profile') }}">
-                    <i class="fas fa-user-cog me-1"></i>个人资料
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('email_auth.email_login') }}"
+                  >
+                    <i class="fas fa-user-cog me-1"></i>邮箱设置
                   </a>
                 </li>
                 <li><hr class="dropdown-divider" /></li>
                 <li>
-                  <a class="dropdown-item" href="{{ url_for('auth.logout') }}">
+                  <a
+                    class="dropdown-item"
+                    href="{{ url_for('email_auth.logout') }}"
+                  >
                     <i class="fas fa-sign-out-alt me-1"></i>退出登录
                   </a>
                 </li>
@@ -94,13 +101,11 @@
             </li>
             {% else %}
             <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('auth.login') }}">
-                <i class="fas fa-sign-in-alt me-1"></i>登录
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{{ url_for('auth.register') }}">
-                <i class="fas fa-user-plus me-1"></i>注册
+              <a
+                class="nav-link"
+                href="{{ url_for('email_auth.email_login') }}"
+              >
+                <i class="fas fa-sign-in-alt me-1"></i>邮箱登录
               </a>
             </li>
             {% endif %}
