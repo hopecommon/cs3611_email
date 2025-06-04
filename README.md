@@ -169,7 +169,9 @@ python tests/performance/test_high_concurrency.py
 # 运行完整演示，包含密钥生成、加密发送、解密接收
 python demo_pgp_with_auth.py
 ```
+
 **运行统一的命令行界面：测试用户名为pgptest,密码为pgp123**
+```
 python pgp_cli.py
 ```
 ## 已知问题

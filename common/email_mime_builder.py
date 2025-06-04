@@ -174,6 +174,19 @@ class EmailFormatter:
             raise
 
     @classmethod
+    def normalize_headers(cls, raw_content: str) -> str:
+        """
+        标准化邮件头部格式
+
+        Args:
+            raw_content: 原始邮件内容
+
+        Returns:
+            标准化后的邮件内容
+        """
+        return cls._fix_header_format(raw_content)
+
+    @classmethod
     def _fix_header_format(cls, raw_content: str) -> str:
         """
         修复邮件头部格式，确保符合RFC标准

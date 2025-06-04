@@ -82,21 +82,20 @@ def parse_args():
     parser.add_argument("--config", type=str, help="配置文件路径")
     parser.add_argument("--verbose", action="store_true", help="显示详细信息")
 
-        # 其他选项
-    parser.add_argument("--save", type=str, help="保存邮件为.eml文件")
-    parser.add_argument("--load", type=str, help="从.eml文件加载邮件")
-    parser.add_argument("--config", type=str, help="配置文件路径")
-    parser.add_argument("--verbose", action="store_true", help="显示详细信息")
-
     # PGP加密选项
     pgp_group = parser.add_argument_group("PGP加密设置")
     pgp_group.add_argument("--pgp-encrypt", action="store_true", help="启用PGP加密邮件")
     pgp_group.add_argument("--pgp-sign", action="store_true", help="启用PGP数字签名")
-    pgp_group.add_argument("--pgp-recipient-key", type=str, help="收件人PGP公钥ID（自动查找）")
-    pgp_group.add_argument("--pgp-sender-key", type=str, help="发件人PGP私钥ID（自动查找）")
+    pgp_group.add_argument(
+        "--pgp-recipient-key", type=str, help="收件人PGP公钥ID（自动查找）"
+    )
+    pgp_group.add_argument(
+        "--pgp-sender-key", type=str, help="发件人PGP私钥ID（自动查找）"
+    )
     pgp_group.add_argument("--pgp-passphrase", type=str, help="私钥密码")
-    pgp_group.add_argument("--pgp-ask-passphrase", action="store_true", help="提示输入私钥密码")
-
+    pgp_group.add_argument(
+        "--pgp-ask-passphrase", action="store_true", help="提示输入私钥密码"
+    )
 
     return parser.parse_args()
 
