@@ -1,0 +1,174 @@
+<svg width="3200" height="1730" viewBox="0 0 1200 650" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Segoe UI', Arial, sans-serif;">
+
+  <defs>
+    <style type="text/css">
+      .mainText { fill: #2c3e50; }
+      .accentText { fill: #3498db; }
+      .successText { fill: #27ae60; }
+      .warningText { fill: #f39c12; }
+      .purpleText { fill: #9b59b6; }
+      .grayText { fill: #7f8c8d; }
+
+      .titleMain { font-size: 32px; font-weight: bold; }
+      .titleSub { font-size: 18px; }
+      .titleSection { font-size: 16px; font-weight: bold; }
+      .textBody { font-size: 12px; line-height: 1.3em; }
+      .textSmall { font-size: 10px; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="100%" height="100%" fill="#f8f9fa"/>
+
+  <!-- Header -->
+  <g id="header" class="mainText">
+    <text x="600" y="40" text-anchor="middle" class="titleMain">CS3611 Email System Implementation</text>
+    <text x="600" y="65" text-anchor="middle" class="titleSub">A Complete SMTP/POP3 Client-Server System with SSL/TLS Security</text>
+    <text x="600" y="85" text-anchor="middle" class="textSmall grayText">Course Project: CS3611 Computer Networks | Student: Lin Deng Kang Wu Song</text>
+  </g>
+
+  <!-- Main Content Grid -->
+  <g id="main-content">
+
+    <!-- Project Overview -->
+    <g id="overview">
+      <rect x="20" y="110" width="360" height="180" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="200" y="130" text-anchor="middle" class="titleSection accentText">Project Overview</text>
+      <text x="30" y="150" class="textBody mainText">
+        <tspan x="30" dy="15">A mail system using SMTP &amp; POP3 protocols. Core features:</tspan>
+        <tspan x="30" dy="15"><tspan class="successText">&#x2713;</tspan> Client: Send (Plain/HTML, Attachments) &amp; Receive emails.</tspan>
+        <tspan x="40" dy="13">Local .eml storage.</tspan>
+        <tspan x="30" dy="13"><tspan class="successText">&#x2713;</tspan> Client: User auth (Plain &amp; SSL/TLS: LOGIN/AUTH PLAIN).</tspan>
+        <tspan x="30" dy="13"><tspan class="successText">&#x2713;</tspan> Server: Simulated SMTP (Python smtpd), POP3 functions.</tspan>
+        <tspan x="30" dy="13"><tspan class="successText">&#x2713;</tspan> Server: SQLite for metadata, handles 100+ concurrent clients.</tspan>
+        <tspan x="30" dy="13"><tspan class="successText">&#x2713;</tspan> Security: SSL/TLS for secure connections.</tspan>
+      </text>
+    </g>
+
+    <!-- System Architecture -->
+    <g id="architecture">
+      <rect x="400" y="110" width="380" height="180" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="590" y="130" text-anchor="middle" class="titleSection accentText">System Architecture</text>
+      <g transform="translate(420, 145)" class="textSmall mainText">
+        <!-- Client Layer -->
+        <rect x="0" y="0" width="340" height="25" fill="#e8f4fd" stroke="#3498db" stroke-width="1"/>
+        <text x="170" y="15" text-anchor="middle">Client (SMTP/POP3, CLI/Web)</text>
+
+        <!-- SSL/TLS Layer -->
+        <rect x="50" y="30" width="240" height="20" fill="#d4edda" stroke="#27ae60" stroke-width="1"/>
+        <text x="170" y="42" text-anchor="middle">SSL/TLS Encryption</text>
+
+        <!-- Server Layer -->
+        <rect x="0" y="55" width="340" height="30" fill="#fff3cd" stroke="#f39c12" stroke-width="1"/>
+        <text x="170" y="72" text-anchor="middle">Server (Sim. SMTP/POP3, Auth)</text>
+
+        <!-- Data Storage Layer -->
+        <rect x="20" y="90" width="140" height="25" fill="#f8d7da" stroke="#e74c3c" stroke-width="1"/>
+        <text x="90" y="105" text-anchor="middle">SQLite (Metadata)</text>
+        <rect x="180" y="90" width="140" height="25" fill="#f8d7da" stroke="#e74c3c" stroke-width="1"/>
+        <text x="250" y="105" text-anchor="middle">.eml Files (Content)</text>
+      </g>
+    </g>
+
+    <!-- Core Features -->
+    <g id="features">
+      <rect x="800" y="110" width="380" height="180" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="990" y="130" text-anchor="middle" class="titleSection accentText">Core Features</text>
+      <text x="810" y="150" class="textBody mainText">
+        <tspan x="810" dy="15" font-weight="bold" class="accentText">Client-Side:</tspan>
+        <tspan x="820" dy="13">- SMTP: Send plain/HTML emails, attachments</tspan>
+        <tspan x="820" dy="13">- POP3: Receive &amp; download emails to local .eml</tspan>
+
+        <tspan x="810" dy="18" font-weight="bold" class="accentText">Server-Side:</tspan>
+        <tspan x="820" dy="13">- Simulated SMTP for receiving, POP3 for retrieval</tspan>
+        <tspan x="820" dy="13">- Concurrent Ops: Handles 100+ client actions</tspan>
+        <tspan x="820" dy="13">- Storage: SQLite for metadata, .eml for content</tspan>
+
+        <tspan x="810" dy="18" font-weight="bold" class="accentText">Security:</tspan>
+        <tspan x="820" dy="13">- SSL/TLS for secure login and data transmission</tspan>
+      </text>
+    </g>
+
+    <!-- Implementation Details -->
+    <g id="implementation">
+      <rect x="20" y="310" width="360" height="220" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="200" y="330" text-anchor="middle" class="titleSection accentText">Implementation Details</text>
+      <text x="30" y="350" class="textBody mainText">
+        <tspan x="30" dy="15"><tspan font-weight="bold">Protocol Adherence:</tspan> Strict SMTP (RFC 5321) and</tspan>
+        <tspan x="30" dy="13">POP3 (RFC 1939) command/response handling.</tspan>
+
+        <tspan x="30" dy="18"><tspan font-weight="bold">MIME Message Handling:</tspan></tspan>
+        <tspan x="40" dy="13">- Support for multipart messages (text/plain, text/html).</tspan>
+        <tspan x="40" dy="13">- Base64 encoding/decoding for attachments.</tspan>
+        <tspan x="40" dy="13">- Correct "Content-Type" &amp; "Content-Disposition" headers.</tspan>
+
+        <tspan x="30" dy="18"><tspan font-weight="bold">Modular Client-Server Design:</tspan></tspan>
+        <tspan x="40" dy="13">- Clear separation of networking, protocol logic, and</tspan>
+        <tspan x="40" dy="13">  data storage components for maintainability.</tspan>
+
+        <tspan x="30" dy="18"><tspan font-weight="bold">Database &amp; Storage:</tspan></tspan>
+        <tspan x="40" dy="13">- SQLite for user accounts, email metadata.</tspan>
+        <tspan x="40" dy="13">- .eml files for email content preservation.</tspan>
+      </text>
+    </g>
+
+    <!-- Performance & Testing -->
+    <g id="performance">
+      <rect x="400" y="310" width="380" height="220" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="590" y="330" text-anchor="middle" class="titleSection accentText">Performance &amp; Testing</text>
+
+      <text x="410" y="350" class="textBody mainText">
+        <tspan x="410" dy="15"><tspan font-weight="bold">Concurrency:</tspan></tspan>
+        <tspan x="420" dy="13">- Server handles <tspan font-weight="bold" class="successText">100+ concurrent client operations</tspan></tspan>
+        <tspan x="420" dy="13">  (simultaneous SMTP send &amp; POP3 receive tasks)</tspan>
+        <tspan x="420" dy="13">  effectively in stress tests.</tspan>
+        <tspan x="420" dy="13">- Required minimum <tspan class="successText">50</tspan> concurrent clients: <tspan font-weight="bold" class="successText">Achieved</tspan></tspan>
+
+        <tspan x="410" dy="18"><tspan font-weight="bold">Functional Testing:</tspan></tspan>
+        <tspan x="420" dy="13">- Comprehensive tests for core features: email types,</tspan>
+        <tspan x="420" dy="13">  attachments, auth methods. High pass rate.</tspan>
+
+        <tspan x="410" dy="18"><tspan font-weight="bold">Stress Testing:</tspan></tspan>
+        <tspan x="420" dy="13">- Email format parsing compatibility verified.</tspan>
+        <tspan x="420" dy="13">- Resource management &amp; error recovery tested.</tspan>
+      </text>
+    </g>
+
+    <!-- Extended Features -->
+    <g id="extended">
+      <rect x="800" y="310" width="380" height="220" fill="#ffffff" stroke="#3498db" stroke-width="2" rx="5"/>
+      <text x="990" y="330" text-anchor="middle" class="titleSection accentText">Extended Features</text>
+      <text x="810" y="350" class="textBody mainText">
+        <tspan x="810" dy="15"><tspan font-weight="bold" class="purpleText">Spam Filtering (Basic):</tspan></tspan>
+        <tspan x="820" dy="13">- Keyword-based marking of potential spam emails</tspan>
+        <tspan x="820" dy="13">  (e.g., "X-Spam-Flag: YES").</tspan>
+
+        <tspan x="810" dy="18"><tspan font-weight="bold" class="purpleText">Mail Recall Functionality:</tspan></tspan>
+        <tspan x="820" dy="13">- Server-side recall of undownloaded emails via unique ID.</tspan>
+        <tspan x="820" dy="13">- Client sends special recall command.</tspan>
+
+        <tspan x="810" dy="18"><tspan font-weight="bold" class="purpleText">User Interface:</tspan></tspan>
+        <tspan x="820" dy="13">- <tspan class="successText">Primary:</tspan> Robust interactive CLI for all client ops.</tspan>
+        <tspan x="820" dy="13">- <tspan class="warningText">Experimental:</tspan> Basic Flask Web UI (proof-of-concept).</tspan>
+
+        <tspan x="810" dy="18"><tspan font-weight="bold" class="purpleText">Advanced Features:</tspan></tspan>
+        <tspan x="820" dy="13">- Multi-user concurrent operations support.</tspan>
+        <tspan x="820" dy="13">- RFC 2047 compliant email encoding standards.</tspan>
+      </text>
+    </g>
+  </g>
+
+  <!-- Footer -->
+  <g id="footer">
+    <text x="600" y="570" text-anchor="middle" class="textBody mainText">
+      <tspan font-weight="bold">Conclusion &amp; Educational Value:</tspan> This project provided deep insights into email protocols, network
+    </text>
+    <text x="600" y="590" text-anchor="middle" class="textBody mainText">
+      programming, security, and system design. A practical application of CS3611 concepts.
+    </text>
+    <text x="600" y="620" text-anchor="middle" class="textBody mainText" font-weight="bold">
+      Project Resources(GitHub): <tspan fill="#3498db">https://github.com/hopecommon/cs3611_email</tspan>
+    </text>
+  </g>
+
+</svg>

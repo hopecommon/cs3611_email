@@ -366,7 +366,7 @@ class EmailService:
         include_spam: bool = True,
         include_recalled: bool = False,  # 新增参数
         is_spam: Optional[bool] = None,  # 新增过滤参数
-        limit: int = 100,
+        limit: int = 500,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """

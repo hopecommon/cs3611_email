@@ -212,65 +212,64 @@ class EnhancedConcurrencyTester:
             return False
 
     def send_single_email(self, user_number: int) -> TestResult:
-        """发送单封邮件"""
+        """发送单封邮件 - 真正的并发实现"""
         start_time = time.time()
+        timestamp = datetime.now()
 
         try:
+            # 直接使用SMTP客户端而不是subprocess，避免进程创建开销
+            from client.smtp_client import SMTPClient
+
             subject = f"并发测试邮件 #{user_number:03d}"
             content = f"""这是第{user_number:03d}封并发测试邮件
 
 邮件编号: {user_number:03d}
 发送者ID: sender_{user_number:03d}
-发送时间: {datetime.now()}
+发送时间: {timestamp}
 目标用户: {self.target_email}
 
 本邮件用于测试SMTP服务器的高并发处理能力。
 请验证邮件编号 {user_number:03d} 的正确性。
 """
 
-            # 构造命令行参数
-            cmd = [
-                sys.executable,
-                "-m",
-                "client.smtp_cli",
-                "--host",
-                "localhost",
-                "--port",
-                str(self.smtp_port),
-                "--username",
-                self.target_username,
-                "--password",
-                self.target_password,
-                "--from",
-                f"sender_{user_number:03d}@test.local",
-                "--to",
-                self.target_email,
-                "--subject",
-                subject,
-                "--text",
-                content,
-            ]
+            # 创建Email对象
+            from common.models import Email, EmailAddress, EmailStatus
 
-            # 执行命令
-            result = subprocess.run(
-                cmd,
-                cwd=Path(__file__).parent.parent.parent,
-                capture_output=True,
-                text=True,
-                timeout=30,
+            email = Email(
+                message_id=f"<test_{user_number:03d}_{timestamp.strftime('%Y%m%d_%H%M%S')}@localhost>",
+                from_addr=EmailAddress(
+                    name=f"Sender {user_number:03d}",
+                    address=f"sender_{user_number:03d}@test.local",
+                ),
+                to_addrs=[EmailAddress(name="Test User", address=self.target_email)],
+                subject=subject,
+                text_content=content,
+                date=timestamp,
+                status=EmailStatus.DRAFT,
             )
 
+            # 创建SMTP客户端连接
+            smtp_client = SMTPClient(
+                host="localhost",
+                port=self.smtp_port,
+                use_ssl=False,
+                username=self.target_username,
+                password=self.target_password,
+                timeout=10,  # 减少超时时间以提高并发性能
+                save_sent_emails=False,  # 测试时不保存邮件以提高性能
+            )
+
+            # 发送邮件
+            success = smtp_client.send_email(email)
+
             duration = time.time() - start_time
-            success = result.returncode == 0
 
             return TestResult(
                 user_number=user_number,
                 success=success,
                 duration=duration,
-                error=(
-                    None if success else (result.stderr or result.stdout or "未知错误")
-                ),
-                timestamp=datetime.now(),
+                error=None if success else "SMTP发送失败",
+                timestamp=timestamp,
             )
 
         except Exception as e:
@@ -280,7 +279,7 @@ class EnhancedConcurrencyTester:
                 success=False,
                 duration=duration,
                 error=str(e),
-                timestamp=datetime.now(),
+                timestamp=timestamp,
             )
 
     def receive_emails_via_cli(self) -> List[Dict]:
@@ -310,6 +309,10 @@ class EnhancedConcurrencyTester:
                 pop3_client.connect()
 
                 logger.debug("正在获取邮件列表...")
+                # 先检查服务器端有多少邮件
+                email_list = pop3_client.list_emails()
+                logger.info(f"POP3服务器报告有 {len(email_list)} 封邮件")
+
                 emails = pop3_client.retrieve_all_emails()
 
                 logger.debug("正在断开POP3连接...")
@@ -660,19 +663,28 @@ class EnhancedConcurrencyTester:
             # 1. 启动性能监控
             self.connection_monitor.start()
 
-            # 2. 并发发送邮件
-            print(f"📤 开始并发发送 {num_users} 封邮件...")
+            # 2. 真正的并发发送邮件
+            print(f"📤 开始真正并发发送 {num_users} 封邮件...")
+            print("⚡ 使用直接SMTP客户端连接，避免subprocess开销")
+
+            # 使用更大的线程池以实现真正的并发
+            max_workers = min(num_users, 100)  # 增加并发数
+            print(f"🔧 线程池大小: {max_workers}")
+
             start_time = time.time()
 
-            # 使用更大的线程池
-            max_workers = min(num_users, THREAD_POOL_SIZE // 2)
             with concurrent.futures.ThreadPoolExecutor(
                 max_workers=max_workers
             ) as executor:
+                # 提交所有任务
+                print("📋 提交所有发送任务...")
                 send_futures = [
                     executor.submit(self.send_single_email, i)
                     for i in range(1, num_users + 1)
                 ]
+
+                print(f"✅ 已提交 {len(send_futures)} 个并发任务")
+                print("⏱️  等待所有任务完成...")
 
                 completed = 0
                 for future in concurrent.futures.as_completed(
@@ -683,12 +695,14 @@ class EnhancedConcurrencyTester:
                         self.send_results.append(result)
                         completed += 1
 
-                        if completed % 10 == 0:
+                        if completed % 20 == 0:  # 减少输出频率
                             success_count = sum(
                                 1 for r in self.send_results if r.success
                             )
+                            elapsed = time.time() - start_time
+                            rate = completed / elapsed if elapsed > 0 else 0
                             print(
-                                f"  进度: {completed}/{num_users} (成功: {success_count})"
+                                f"  进度: {completed}/{num_users} (成功: {success_count}, 速率: {rate:.1f}/秒)"
                             )
 
                     except Exception as e:
@@ -823,16 +837,28 @@ class EnhancedConcurrencyTester:
                     "concurrent_window": len(
                         [t for t in time_spans if t < 5.0]
                     ),  # 5秒内的发送
-                    # 修复并发判定逻辑：检查发送密度和总时间
+                    # 真正的并发判定逻辑：基于发送密度和时间分布
                     "is_concurrent": (
-                        total_duration <= 10.0  # 总时间不超过10秒
-                        and len(send_times) >= 2  # 至少2封邮件
-                        and (len(send_times) / max(total_duration, 0.001))
-                        >= 0.5  # 发送密度 >= 0.5邮件/秒
-                    )
-                    or (
-                        len(send_times) <= 5
-                        and total_duration <= 2.0  # 小规模测试：5封邮件2秒内完成
+                        # 高并发标准：大量邮件在短时间内完成
+                        (
+                            len(send_times) >= 50
+                            and total_duration <= 30.0
+                            and (len(send_times) / max(total_duration, 0.001)) >= 50.0
+                        )  # >= 50邮件/秒
+                        or
+                        # 中等并发标准：中等数量邮件快速完成
+                        (
+                            len(send_times) >= 20
+                            and total_duration <= 15.0
+                            and (len(send_times) / max(total_duration, 0.001)) >= 10.0
+                        )  # >= 10邮件/秒
+                        or
+                        # 小规模并发标准：少量邮件极快完成
+                        (
+                            len(send_times) <= 20
+                            and total_duration <= 5.0
+                            and (len(send_times) / max(total_duration, 0.001)) >= 2.0
+                        )  # >= 2邮件/秒
                     ),
                     "send_rate": len(send_times)
                     / max(total_duration, 0.001),  # 避免除零

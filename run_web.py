@@ -31,8 +31,10 @@ def main():
         print("💡 支持直接邮箱登录(QQ、Gmail、163等)")
         print("-" * 50)
 
-        # 启动开发服务器
-        app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+        # 启动开发服务器（禁用调试模式避免文件监控问题）
+        app.run(
+            host="0.0.0.0", port=5000, debug=False, threaded=True, use_reloader=False
+        )
 
     except KeyboardInterrupt:
         print("\n\n👋 服务器已停止")
