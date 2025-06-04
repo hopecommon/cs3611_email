@@ -159,6 +159,19 @@ python tests/integration/test_pop3_ssl.py
 python tests/performance/test_high_concurrency.py
 ```
 
+
+##  PGP端到端加密功能
+
+###  一键PGP演示
+**体验完整的PGP加密邮件系统：**
+
+```bash
+# 运行完整演示，包含密钥生成、加密发送、解密接收
+python demo_pgp_with_auth.py
+```
+**运行统一的命令行界面：测试用户名为pgptest,密码为pgp123**
+python pgp_cli.py
+```
 ## 已知问题
 
 1. **邮件格式处理问题**（正在修复中）：
@@ -185,7 +198,7 @@ python tests/performance/test_high_concurrency.py
 - [用户指南](docs/user_guide/)
 - [API文档](docs/api/)
 - [开发指南](docs/development/)
-
+- [PGP加密指南](docs/pgp_guide.md)
 ## 许可证
 
 MIT License
