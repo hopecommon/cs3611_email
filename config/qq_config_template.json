@@ -4,20 +4,20 @@
     "port": 587,
     "use_ssl": true,
     "ssl_port": 465,
-    "username": "your_qq_number@qq.com",
-    "password": "your_authorization_code"
+    "username": "1913477858@qq.com",
+    "password": "ethpjjjuwoatfhff"
   },
   "pop3": {
     "host": "pop.qq.com",
     "port": 110,
     "use_ssl": true,
     "ssl_port": 995,
-    "username": "your_qq_number@qq.com",
-    "password": "your_authorization_code"
+    "username": "1913477858@qq.com",
+    "password": "ethpjjjuwoatfhff"
   },
   "email": {
-    "from_name": "您的名字",
-    "from_address": "your_qq_number@qq.com",
-    "default_to": "recipient@example.com"
+    "from_name": "yunyunwu",
+    "from_address": "1913477858@qq.com",
+    "default_to": "2445859917@qq.com"
   }
 }

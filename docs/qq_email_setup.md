@@ -17,7 +17,7 @@
 您可以通过以下两种方式之一配置QQ邮箱SMTP服务：
 
 ### 2.1 使用JSON配置文件
-
+ethpjjjuwoatfhff
 1. 复制`config/qq_config.json`文件并填写您的信息：
 
 ```json
