@@ -1,0 +1,537 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>邮件系统并发测试报告</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px solid #007acc;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            color: #007acc;
+            margin: 0;
+            font-size: 2.5em;
+        }
+        .header .subtitle {
+            color: #666;
+            font-size: 1.2em;
+            margin-top: 10px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            border-left: 4px solid #007acc;
+            background: #f9f9f9;
+        }
+        .section h2 {
+            color: #007acc;
+            margin-top: 0;
+            display: flex;
+            align-items: center;
+        }
+        .section h2::before {
+            content: "📊";
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #007acc;
+        }
+        .metric-label {
+            color: #666;
+            margin-top: 5px;
+        }
+        .success {
+            color: #28a745;
+        }
+        .warning {
+            color: #ffc107;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .evidence-list {
+            list-style: none;
+            padding: 0;
+        }
+        .evidence-list li {
+            padding: 10px;
+            margin: 5px 0;
+            background: white;
+            border-left: 4px solid #28a745;
+            border-radius: 4px;
+        }
+        .evidence-list li::before {
+            content: "✅";
+            margin-right: 10px;
+        }
+        .sample-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+        }
+        .sample-table th,
+        .sample-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        .sample-table th {
+            background: #007acc;
+            color: white;
+        }
+        .sample-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        .check-mark {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .x-mark {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        .timing-chart {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #007acc, #28a745);
+            transition: width 0.3s ease;
+        }
+        .content-preview {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 邮件系统并发测试报告</h1>
+            <div class="subtitle">高并发能力验证与内容完整性分析</div>
+            <div class="subtitle">测试时间: 2025-06-04 15:42:22</div>
+        </div>
+
+        
+    <div class="section">
+        <h2>测试摘要</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value success">200</div>
+                <div class="metric-label">成功发送</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">200</div>
+                <div class="metric-label">成功接收</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">200</div>
+                <div class="metric-label">正确匹配</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">100.0%</div>
+                <div class="metric-label">匹配率</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 100.0%"></div>
+        </div>
+        <p style="text-align: center; margin-top: 10px;">邮件匹配成功率: 100.0%</p>
+    </div>
+    
+        
+    <div class="section">
+        <h2>并发性能证据</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">200</div>
+                <div class="metric-label">并发用户数</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">76.2</div>
+                <div class="metric-label">发送速率(邮件/秒)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value">250</div>
+                <div class="metric-label">线程池大小</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">
+                    ✅ 是
+                </div>
+                <div class="metric-label">真正并发</div>
+            </div>
+        </div>
+        
+        <ul class="evidence-list">
+            <li>✅ 发送时间分布证明真正的并发处理</li><li>✅ 高匹配率证明并发处理的可靠性</li><li>✅ 高内容完整性证明没有数据混乱</li><li>✅ 发送者准确性证明邮件正确路由</li><li>✅ 200封邮件编号完全匹配，无错位</li>
+        </ul>
+    </div>
+    
+        
+    <div class="section">
+        <h2>时间分布分析</h2>
+        <div class="timing-chart">
+            <p><strong>发送时间窗口:</strong> 15:42:08.216 - 15:42:10.840</p>
+            <p><strong>总耗时:</strong> 2.62 秒</p>
+            
+            <div style="margin: 20px 0;">
+                <h4>时间分布 (证明并发性):</h4>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    <div class="metric-card">
+                        <div class="metric-value success">126</div>
+                        <div class="metric-label">< 1秒</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">73</div>
+                        <div class="metric-label">1-3秒</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">0</div>
+                        <div class="metric-label">3-5秒</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value warning">0</div>
+                        <div class="metric-label">> 5秒</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+        
+    <div class="section">
+        <h2>内容完整性验证</h2>
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-value">200</div>
+                <div class="metric-label">检查邮件数</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">200</div>
+                <div class="metric-label">完整性通过</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">100.0%</div>
+                <div class="metric-label">完整性率</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-value success">100.0%</div>
+                <div class="metric-label">发送者准确率</div>
+            </div>
+        </div>
+        
+        <div class="progress-bar">
+            <div class="progress-fill" style="width: 100.0%"></div>
+        </div>
+        <p style="text-align: center; margin-top: 10px;">内容完整性: 100.0%</p>
+    </div>
+    
+        
+    <div class="section">
+        <h2>验证标准汇总</h2>
+        <table class="sample-table">
+            <thead>
+                <tr>
+                    <th>验证标准</th>
+                    <th>通过状态</th>
+                    <th>实际值</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+        <tr>
+            <td>邮件匹配率 ≥ 95%</td>
+            <td class="success">✅</td>
+            <td>100.0%</td>
+        </tr>
+        
+        <tr>
+            <td>内容完整性 ≥ 90%</td>
+            <td class="success">✅</td>
+            <td>100.0%</td>
+        </tr>
+        
+        <tr>
+            <td>发送者准确性 ≥ 95%</td>
+            <td class="success">✅</td>
+            <td>100.0%</td>
+        </tr>
+        
+        <tr>
+            <td>真正并发处理</td>
+            <td class="success">✅</td>
+            <td>✅ 是</td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+    
+        
+    <div class="section">
+        <h2>邮件内容样例</h2>
+        
+        <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+            <h4>📧 邮件样例 #163</h4>
+            <p><strong>主题:</strong> 并发测试邮件 #163</p>
+            <p><strong>完整性:</strong> <span class="check-mark">✅ 通过</span></p>
+            <p><strong>发送者:</strong> <span class="check-mark">✅ 正确</span></p>
+            <div class="content-preview">
+                <strong>内容预览:</strong><br>
+                这是第163封并发测试邮件
+
+邮件编号: 163
+发送者ID: sender_163
+发送时间: 2025-06-04 15:42:10.026775
+目标用户: target_user_154208@test.local
+
+本邮件用于测试SMTP服务器的高并发处理能力。
+请验证邮件编号 163 的正确性。
+            </div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+            <h4>📧 邮件样例 #164</h4>
+            <p><strong>主题:</strong> 并发测试邮件 #164</p>
+            <p><strong>完整性:</strong> <span class="check-mark">✅ 通过</span></p>
+            <p><strong>发送者:</strong> <span class="check-mark">✅ 正确</span></p>
+            <div class="content-preview">
+                <strong>内容预览:</strong><br>
+                这是第164封并发测试邮件
+
+邮件编号: 164
+发送者ID: sender_164
+发送时间: 2025-06-04 15:42:10.048774
+目标用户: target_user_154208@test.local
+
+本邮件用于测试SMTP服务器的高并发处理能力。
+请验证邮件编号 164 的正确性。
+            </div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+            <h4>📧 邮件样例 #165</h4>
+            <p><strong>主题:</strong> 并发测试邮件 #165</p>
+            <p><strong>完整性:</strong> <span class="check-mark">✅ 通过</span></p>
+            <p><strong>发送者:</strong> <span class="check-mark">✅ 正确</span></p>
+            <div class="content-preview">
+                <strong>内容预览:</strong><br>
+                这是第165封并发测试邮件
+
+邮件编号: 165
+发送者ID: sender_165
+发送时间: 2025-06-04 15:42:10.075774
+目标用户: target_user_154208@test.local
+
+本邮件用于测试SMTP服务器的高并发处理能力。
+请验证邮件编号 165 的正确性。
+            </div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+            <h4>📧 邮件样例 #166</h4>
+            <p><strong>主题:</strong> 并发测试邮件 #166</p>
+            <p><strong>完整性:</strong> <span class="check-mark">✅ 通过</span></p>
+            <p><strong>发送者:</strong> <span class="check-mark">✅ 正确</span></p>
+            <div class="content-preview">
+                <strong>内容预览:</strong><br>
+                这是第166封并发测试邮件
+
+邮件编号: 166
+发送者ID: sender_166
+发送时间: 2025-06-04 15:42:10.095774
+目标用户: target_user_154208@test.local
+
+本邮件用于测试SMTP服务器的高并发处理能力。
+请验证邮件编号 166 的正确性。
+            </div>
+        </div>
+        
+        <div style="margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 8px;">
+            <h4>📧 邮件样例 #167</h4>
+            <p><strong>主题:</strong> 并发测试邮件 #167</p>
+            <p><strong>完整性:</strong> <span class="check-mark">✅ 通过</span></p>
+            <p><strong>发送者:</strong> <span class="check-mark">✅ 正确</span></p>
+            <div class="content-preview">
+                <strong>内容预览:</strong><br>
+                这是第167封并发测试邮件
+
+邮件编号: 167
+发送者ID: sender_167
+发送时间: 2025-06-04 15:42:10.104774
+目标用户: target_user_154208@test.local
+
+本邮件用于测试SMTP服务器的高并发处理能力。
+请验证邮件编号 167 的正确性。
+            </div>
+        </div>
+        
+        
+        <h3>前10封邮件详细验证表</h3>
+        <table class="sample-table">
+            <thead>
+                <tr>
+                    <th>编号</th>
+                    <th>主题正确</th>
+                    <th>内容完整</th>
+                    <th>发送者</th>
+                    <th>大小(字节)</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+        <tr>
+            <td>001</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_001@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>002</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_002@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>003</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_003@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>004</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_004@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>005</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_005@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>006</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_006@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>007</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_007@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>008</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_008@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>009</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_009@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+        <tr>
+            <td>010</td>
+            <td class="check-mark">✅</td>
+            <td class="check-mark">✅</td>
+            <td>sender_010@test.local...</td>
+            <td>266</td>
+        </tr>
+        
+            </tbody>
+        </table>
+    </div>
+    
+
+        <div class="footer">
+            <p>📧 邮件系统并发测试报告 | 生成时间: 2025-06-04 15:42:22</p>
+        </div>
+    </div>
+</body>
+</html>
