@@ -89,13 +89,13 @@ endblock %} {% block content %}
 
   <!-- 邮件统计 -->
   <div class="row mb-4">
-    <div class="col-md-3">
-      <div class="card bg-primary text-white">
+    <div class="col-6 col-md-3 mb-3">
+      <div class="card bg-primary text-white h-100">
         <div class="card-body">
           <div class="d-flex justify-content-between">
             <div>
-              <h5>收到邮件</h5>
-              <h2 id="total-received">{{ email_stats.total }}</h2>
+              <h6 class="card-title">收到邮件</h6>
+              <h3 id="total-received">{{ email_stats.total }}</h3>
             </div>
             <div class="align-self-center">
               <i class="fas fa-inbox fa-2x"></i>
@@ -104,13 +104,13 @@ endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card bg-warning text-white">
+    <div class="col-6 col-md-3 mb-3">
+      <div class="card bg-warning text-white h-100">
         <div class="card-body">
           <div class="d-flex justify-content-between">
             <div>
-              <h5>未读邮件</h5>
-              <h2 id="unread-count">{{ email_stats.unread }}</h2>
+              <h6 class="card-title">未读邮件</h6>
+              <h3 id="unread-count">{{ email_stats.unread }}</h3>
             </div>
             <div class="align-self-center">
               <i class="fas fa-envelope-open fa-2x"></i>
@@ -119,13 +119,13 @@ endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card bg-success text-white">
+    <div class="col-6 col-md-3 mb-3">
+      <div class="card bg-success text-white h-100">
         <div class="card-body">
           <div class="d-flex justify-content-between">
             <div>
-              <h5>已发送</h5>
-              <h2 id="total-sent">0</h2>
+              <h6 class="card-title">已发送</h6>
+              <h3 id="total-sent">0</h3>
             </div>
             <div class="align-self-center">
               <i class="fas fa-paper-plane fa-2x"></i>
@@ -134,13 +134,13 @@ endblock %} {% block content %}
         </div>
       </div>
     </div>
-    <div class="col-md-3">
-      <div class="card bg-danger text-white">
+    <div class="col-6 col-md-3 mb-3">
+      <div class="card bg-danger text-white h-100">
         <div class="card-body">
           <div class="d-flex justify-content-between">
             <div>
-              <h5>垃圾邮件</h5>
-              <h2 id="spam-count">0</h2>
+              <h6 class="card-title">垃圾邮件</h6>
+              <h3 id="spam-count">0</h3>
             </div>
             <div class="align-self-center">
               <i class="fas fa-shield-alt fa-2x"></i>
@@ -160,40 +160,40 @@ endblock %} {% block content %}
         </div>
         <div class="card-body">
           <div class="row">
-            <div class="col-md-3">
+            <div class="col-6 col-md-3 mb-3">
               <a
                 href="{{ url_for('email.inbox') }}"
-                class="btn btn-outline-primary btn-lg w-100 mb-2"
+                class="btn btn-outline-primary btn-lg w-100 h-100 d-flex flex-column justify-content-center"
               >
-                <i class="fas fa-inbox d-block fa-2x mb-2"></i>
-                收件箱
+                <i class="fas fa-inbox fa-2x mb-2"></i>
+                <span>收件箱</span>
               </a>
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3 mb-3">
               <a
                 href="{{ url_for('email.compose') }}"
-                class="btn btn-outline-success btn-lg w-100 mb-2"
+                class="btn btn-outline-success btn-lg w-100 h-100 d-flex flex-column justify-content-center"
               >
-                <i class="fas fa-edit d-block fa-2x mb-2"></i>
-                写邮件
+                <i class="fas fa-edit fa-2x mb-2"></i>
+                <span>写邮件</span>
               </a>
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3 mb-3">
               <a
                 href="{{ url_for('email.sent') }}"
-                class="btn btn-outline-info btn-lg w-100 mb-2"
+                class="btn btn-outline-info btn-lg w-100 h-100 d-flex flex-column justify-content-center"
               >
-                <i class="fas fa-paper-plane d-block fa-2x mb-2"></i>
-                已发送
+                <i class="fas fa-paper-plane fa-2x mb-2"></i>
+                <span>已发送</span>
               </a>
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3 mb-3">
               <button
                 onclick="receiveEmails()"
-                class="btn btn-outline-warning btn-lg w-100 mb-2"
+                class="btn btn-outline-warning btn-lg w-100 h-100 d-flex flex-column justify-content-center"
               >
-                <i class="fas fa-download d-block fa-2x mb-2"></i>
-                接收邮件
+                <i class="fas fa-download fa-2x mb-2"></i>
+                <span>接收邮件</span>
               </button>
             </div>
           </div>
@@ -329,7 +329,14 @@ endblock %} {% block content %}
           // 刷新邮件统计
           loadEmailStats();
         } else {
-          alert("接收邮件失败: " + data.error);
+          const errorMsg = data.error;
+          if (errorMsg.includes("配置邮箱")) {
+            if (confirm("需要先配置邮箱才能接收邮件。是否前往邮箱登录页面？")) {
+              window.location.href = "/auth/email_login";
+            }
+          } else {
+            alert("接收邮件失败: " + errorMsg);
+          }
         }
       })
       .catch((error) => {

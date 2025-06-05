@@ -1,0 +1,452 @@
+{% extends "base.html" %} {% block title %}接收邮件 - 邮件客户端{% endblock %}
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h3 class="card-title mb-0"><i class="fas fa-inbox"></i> 接收邮件</h3>
+          <div class="d-flex align-items-center gap-3">
+            <!-- 邮件数量选择 -->
+            <div class="d-flex align-items-center">
+              <label for="emailLimit" class="form-label me-2 mb-0">
+                <small>显示数量:</small>
+              </label>
+              <select
+                class="form-select form-select-sm"
+                id="emailLimit"
+                style="width: auto"
+              >
+                <option value="10">10封</option>
+                <option value="20" selected>20封</option>
+                <option value="50">50封</option>
+                <option value="100">100封</option>
+                <option value="200">200封</option>
+                <option value="all">全部</option>
+              </select>
+            </div>
+
+            <!-- 刷新按钮 -->
+            <button
+              class="btn btn-outline-primary"
+              onclick="refreshEmails()"
+              id="refreshBtn"
+            >
+              <i class="fas fa-sync-alt"></i> 刷新邮件
+            </button>
+          </div>
+        </div>
+
+        {% if account %}
+        <div class="alert alert-info">
+          <i class="fas fa-user"></i> 当前账户:
+          <strong>{{ account.email }}</strong>
+        </div>
+        {% endif %} {% if emails %}
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 5%">#</th>
+                <th style="width: 20%">发件人</th>
+                <th style="width: 35%">主题</th>
+                <th style="width: 15%">日期</th>
+                <th style="width: 10%">大小</th>
+                <th style="width: 15%">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for email in emails %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    <i class="fas fa-envelope-open text-primary me-2"></i>
+                    <div>
+                      <strong
+                        >{{ email.from_addr.name or email.from_addr.address
+                        }}</strong
+                      >
+                      {% if email.from_addr.name %}
+                      <br /><small class="text-muted"
+                        >{{ email.from_addr.address }}</small
+                      >
+                      {% endif %}
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div>
+                    <strong>{{ email.subject or '(无主题)' }}</strong>
+                    {% if email.attachments %}
+                    <i
+                      class="fas fa-paperclip text-success ms-1"
+                      title="有附件"
+                    ></i>
+                    {% endif %}
+                  </div>
+                  {% if email.text_content %}
+                  <small class="text-muted">
+                    {{ email.text_content[:80] }}{% if email.text_content|length
+                    > 80 %}...{% endif %}
+                  </small>
+                  {% endif %}
+                </td>
+                <td>
+                  <small>
+                    {{ email.formatted_date or email.date }}<br />
+                    {{ email.formatted_time or '' }}
+                  </small>
+                </td>
+                <td>
+                  <small class="text-muted">
+                    {% set content_size = (email.text_content|length if
+                    email.text_content else 0) + (email.html_content|length if
+                    email.html_content else 0) %} {% if content_size < 1024 %}
+                    {{ content_size }} B {% elif content_size < 1048576 %} {{
+                    "%.1f"|format(content_size / 1024) }} KB {% else %} {{
+                    "%.1f"|format(content_size / 1048576) }} MB {% endif %}
+                  </small>
+                </td>
+                <td>
+                  <button
+                    class="btn btn-sm btn-outline-primary"
+                    onclick="viewEmail('{{ loop.index0 }}')"
+                    title="查看邮件"
+                  >
+                    <i class="fas fa-eye"></i>
+                  </button>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="mt-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <small class="text-muted">
+              <i class="fas fa-info-circle"></i>
+              {% if current_limit == 'all' %} 显示全部 {{ emails|length }}
+              封邮件 {% else %} 显示最新 {{ emails|length }} 封邮件（限制: {{
+              current_limit }} 封） {% endif %}
+            </small>
+
+            {% if emails|length >= 20 %}
+            <small class="text-muted">
+              <i class="fas fa-lightbulb"></i>
+              提示：如需查看更多邮件，请调整上方的显示数量
+            </small>
+            {% endif %}
+          </div>
+
+          <!-- 性能提示 -->
+          {% if current_limit == 'all' or (current_limit|int) >= 100 %}
+          <div class="alert alert-info mt-2 py-2">
+            <small>
+              <i class="fas fa-clock"></i>
+              {% if current_limit == 'all' %}
+              正在显示所有邮件，如果邮件数量很多可能需要较长加载时间 {% else %}
+              大量邮件可能需要较长加载时间，建议选择较小的数量以获得更好的体验
+              {% endif %}
+            </small>
+          </div>
+          {% endif %}
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+          <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+          <h5 class="text-muted">暂无邮件</h5>
+          <p class="text-muted">点击上方刷新按钮获取最新邮件</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 邮件详情模态框 -->
+<div
+  class="modal fade"
+  id="emailModal"
+  tabindex="-1"
+  aria-labelledby="emailModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="emailModalLabel">
+          <i class="fas fa-envelope-open"></i> 邮件详情
+        </h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        <div id="emailContent">
+          <!-- 邮件内容将通过JavaScript插入 -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          关闭
+        </button>
+        <button type="button" class="btn btn-primary" onclick="replyEmail()">
+          <i class="fas fa-reply"></i> 回复
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 使用提示 -->
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h5><i class="fas fa-lightbulb"></i> 使用提示</h5>
+        <div class="row">
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-sync-alt fa-2x text-primary mb-2"></i>
+              <h6>实时获取</h6>
+              <p class="text-muted small">点击刷新按钮获取最新邮件</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-eye fa-2x text-success mb-2"></i>
+              <h6>查看详情</h6>
+              <p class="text-muted small">点击查看按钮阅读完整邮件</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-shield-alt fa-2x text-info mb-2"></i>
+              <h6>基于CLI</h6>
+              <p class="text-muted small">使用CLI底层POP3客户端</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<!-- 在页面中添加一个隐藏的数据元素 -->
+<div
+  id="emails-data"
+  style="display: none"
+  data-emails="{% if emails %}{{ emails | tojson | safe }}{% else %}[]{% endif %}"
+  data-current-limit="{{ current_limit or '20' }}"
+></div>
+
+<script>
+  // 从HTML元素中读取数据，这样IDE不会报错
+  const emailsDataElement = document.getElementById("emails-data");
+  const emails = emailsDataElement
+    ? JSON.parse(emailsDataElement.getAttribute("data-emails"))
+    : [];
+  const currentLimit = emailsDataElement
+    ? emailsDataElement.getAttribute("data-current-limit")
+    : "20";
+
+  // 页面加载时设置选择框的值
+  document.addEventListener("DOMContentLoaded", function () {
+    const limitSelect = document.getElementById("emailLimit");
+    if (limitSelect) {
+      limitSelect.value = currentLimit;
+    }
+
+    // URL参数处理（回复功能）
+    const urlParams = new URLSearchParams(window.location.search);
+    const toParam = urlParams.get("to");
+    const subjectParam = urlParams.get("subject");
+    const contentParam = urlParams.get("content");
+
+    if (toParam && document.getElementById("to_addresses")) {
+      document.getElementById("to_addresses").value = toParam;
+    }
+    if (subjectParam && document.getElementById("subject")) {
+      document.getElementById("subject").value = subjectParam;
+    }
+    if (contentParam && document.getElementById("content")) {
+      document.getElementById("content").value = contentParam;
+    }
+  });
+
+  // 刷新邮件功能
+  function refreshEmails() {
+    const limitSelect = document.getElementById("emailLimit");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const selectedLimit = limitSelect.value;
+
+    // 显示加载状态
+    refreshBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 获取中...';
+    refreshBtn.disabled = true;
+
+    // 构建URL
+    const url =
+      window.location.pathname + "?limit=" + encodeURIComponent(selectedLimit);
+
+    // 跳转到新URL
+    window.location.href = url;
+  }
+
+  // 监听选择框变化，自动刷新
+  document.addEventListener("DOMContentLoaded", function () {
+    const limitSelect = document.getElementById("emailLimit");
+    if (limitSelect) {
+      limitSelect.addEventListener("change", function () {
+        // 给用户一点时间看到选择，然后自动刷新
+        setTimeout(refreshEmails, 300);
+      });
+    }
+  });
+
+  function viewEmail(index) {
+    // 确保index是数字
+    index = parseInt(index);
+
+    if (index >= 0 && index < emails.length) {
+      const email = emails[index];
+
+      // 构建邮件内容HTML
+      let emailHtml =
+        '<div class="mb-3">' +
+        "<strong>发件人:</strong> " +
+        (email.from_addr.name || email.from_addr.address) +
+        " &lt;" +
+        email.from_addr.address +
+        "&gt;" +
+        "</div>" +
+        '<div class="mb-3">' +
+        "<strong>收件人:</strong> " +
+        email.to_addrs.map((addr) => addr.address).join(", ") +
+        "</div>";
+
+      if (email.cc_addrs && email.cc_addrs.length > 0) {
+        emailHtml +=
+          '<div class="mb-3">' +
+          "<strong>抄送:</strong> " +
+          email.cc_addrs.map((addr) => addr.address).join(", ") +
+          "</div>";
+      }
+
+      emailHtml +=
+        '<div class="mb-3">' +
+        "<strong>主题:</strong> " +
+        (email.subject || "(无主题)") +
+        "</div>" +
+        '<div class="mb-3">' +
+        "<strong>日期:</strong> " +
+        (email.formatted_datetime ||
+          new Date(email.date).toLocaleString("zh-CN")) +
+        "</div>" +
+        "<hr>" +
+        '<div class="mb-3">' +
+        "<strong>邮件内容:</strong>" +
+        "</div>";
+
+      // 添加邮件正文
+      if (email.html_content) {
+        emailHtml +=
+          '<div class="border p-3 bg-light">' +
+          '<small class="text-muted">HTML内容:</small>' +
+          '<div class="mt-2">' +
+          email.html_content +
+          "</div>" +
+          "</div>";
+      }
+
+      if (email.text_content) {
+        emailHtml +=
+          '<div class="border p-3' +
+          (email.html_content ? " mt-2" : "") +
+          '">' +
+          '<small class="text-muted">文本内容:</small>' +
+          '<pre class="mt-2 mb-0" style="white-space: pre-wrap; font-family: inherit;">' +
+          email.text_content +
+          "</pre>" +
+          "</div>";
+      }
+
+      // 添加附件信息
+      if (email.attachments && email.attachments.length > 0) {
+        emailHtml +=
+          '<div class="mt-3">' +
+          "<strong>附件 (" +
+          email.attachments.length +
+          "):</strong>" +
+          '<ul class="list-group list-group-flush mt-2">';
+
+        email.attachments.forEach((attachment) => {
+          emailHtml +=
+            '<li class="list-group-item d-flex justify-content-between align-items-center">' +
+            "<div>" +
+            '<i class="fas fa-paperclip text-success me-2"></i>' +
+            attachment.filename +
+            "</div>" +
+            '<small class="text-muted">' +
+            attachment.content_type +
+            "</small>" +
+            "</li>";
+        });
+
+        emailHtml += "</ul>" + "</div>";
+      }
+
+      // 设置模态框内容
+      document.getElementById("emailContent").innerHTML = emailHtml;
+      document.getElementById("emailModalLabel").innerHTML =
+        '<i class="fas fa-envelope-open"></i> ' + (email.subject || "(无主题)");
+
+      // 存储当前查看的邮件索引
+      window.currentEmailIndex = index;
+
+      // 显示模态框
+      const modal = new bootstrap.Modal(document.getElementById("emailModal"));
+      modal.show();
+    }
+  }
+
+  function replyEmail() {
+    if (typeof window.currentEmailIndex !== "undefined") {
+      const email = emails[window.currentEmailIndex];
+
+      // 构建回复信息
+      const replyTo = email.from_addr.address;
+      const replySubject = email.subject.startsWith("Re:")
+        ? email.subject
+        : "Re: " + email.subject;
+      const originalContent = email.text_content || email.html_content || "";
+      const replyContent =
+        "\n\n\n--- 原始邮件 ---\n发件人: " +
+        email.from_addr.address +
+        "\n日期: " +
+        (email.formatted_datetime ||
+          new Date(email.date).toLocaleString("zh-CN")) +
+        "\n主题: " +
+        email.subject +
+        "\n\n" +
+        originalContent;
+
+      // 构建回复URL
+      const replyUrl =
+        '{{ url_for("send_email_page") }}?to=' +
+        encodeURIComponent(replyTo) +
+        "&subject=" +
+        encodeURIComponent(replySubject) +
+        "&content=" +
+        encodeURIComponent(replyContent);
+
+      // 跳转到发送页面
+      window.location.href = replyUrl;
+    }
+  }
+</script>
+{% endblock %}

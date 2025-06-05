@@ -76,8 +76,7 @@
                 role="button"
                 data-bs-toggle="dropdown"
               >
-                <i class="fas fa-user me-1"></i>{{ current_user.email if
-                hasattr(current_user, 'email') else current_user.username }}
+                <i class="fas fa-user me-1"></i>{{ current_user.get_id() }}
               </a>
               <ul class="dropdown-menu">
                 <li>
@@ -105,7 +104,7 @@
                 class="nav-link"
                 href="{{ url_for('email_auth.email_login') }}"
               >
-                <i class="fas fa-sign-in-alt me-1"></i>邮箱登录
+                <i class="fas fa-sign-in-alt me-1"></i>登录
               </a>
             </li>
             {% endif %}

@@ -25,78 +25,91 @@
           {% if emails %} {% for email in emails %}
           <div class="email-item">
             <div class="row align-items-center">
-              <div class="col-md-1">
+              <div class="col-1 col-md-1">
                 <input
                   type="checkbox"
                   class="form-check-input"
                   value="{{ email.message_id }}"
                 />
               </div>
-              <div class="col-md-3">
-                <strong
-                  >{{ email.to_addrs|join(', ') if email.to_addrs else
-                  '(无收件人)' }}</strong
+              <div class="col-11 col-md-3">
+                <div
+                  class="d-flex flex-column flex-md-row align-items-start align-items-md-center"
                 >
+                  <strong class="text-truncate me-2"
+                    >{{ email.to_addrs|join(', ') if email.to_addrs else
+                    '(无收件人)' }}</strong
+                  >
+                  <div class="d-flex gap-1 mt-1 mt-md-0">
+                    {% if email.has_attachments %}
+                    <i class="fas fa-paperclip text-muted" title="有附件"></i>
+                    {% endif %}
+                  </div>
+                </div>
                 {% if email.cc_addrs %}
-                <br /><small class="text-muted"
+                <small class="text-muted d-block"
                   >抄送: {{ email.cc_addrs|join(', ') }}</small
                 >
-                {% endif %} {% if email.has_attachments %}
-                <i class="fas fa-paperclip text-muted ms-2" title="有附件"></i>
                 {% endif %}
               </div>
-              <div class="col-md-6">
+              <div class="col-12 col-md-6 mt-2 mt-md-0">
                 <a
                   href="{{ url_for('email.view_sent', message_id=email.message_id) }}"
                   class="text-decoration-none text-dark"
                 >
-                  {{ email.subject or '(无主题)' }}
+                  <div class="text-truncate">
+                    {{ email.subject or '(无主题)' }}
+                  </div>
                 </a>
                 {% if email.status %}
-                <span class="badge bg-info ms-2">{{ email.status }}</span>
+                <span class="badge bg-info mt-1">{{ email.status }}</span>
                 {% endif %}
               </div>
-              <div class="col-md-2 text-end">
-                <small class="text-muted">
-                  {% if email.date %} {{ email.date.strftime('%m-%d %H:%M') }}
-                  {% endif %}
-                </small>
-                <div class="btn-group" role="group">
-                  <button
-                    type="button"
-                    class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                    data-bs-toggle="dropdown"
-                  >
-                    操作
-                  </button>
-                  <ul class="dropdown-menu">
-                    <li>
-                      <a
-                        class="dropdown-item"
-                        href="{{ url_for('email.view_sent', message_id=email.message_id) }}"
-                      >
-                        <i class="fas fa-eye me-2"></i>查看
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        class="dropdown-item"
-                        href="{{ url_for('email.compose') }}?reply_to={{ email.message_id }}"
-                      >
-                        <i class="fas fa-forward me-2"></i>转发
-                      </a>
-                    </li>
-                    <li><hr class="dropdown-divider" /></li>
-                    <li>
-                      <a
-                        class="dropdown-item text-danger"
-                        href="{{ url_for('email.delete_sent', message_id=email.message_id) }}"
-                        onclick="return confirm('确定要删除此邮件吗？')"
-                      >
-                        <i class="fas fa-trash me-2"></i>删除
-                      </a>
-                    </li>
-                  </ul>
+              <div class="col-12 col-md-2 text-start text-md-end mt-2 mt-md-0">
+                <div
+                  class="d-flex flex-column flex-md-row align-items-start align-items-md-end justify-content-md-end"
+                >
+                  <small class="text-muted me-md-2">
+                    {% if email.date %} {{ email.date.strftime('%m-%d %H:%M') }}
+                    {% endif %}
+                  </small>
+                  <div class="btn-group mt-1 mt-md-0" role="group">
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary dropdown-toggle"
+                      data-bs-toggle="dropdown"
+                    >
+                      操作
+                    </button>
+                    <ul class="dropdown-menu">
+                      <li>
+                        <a
+                          class="dropdown-item"
+                          href="{{ url_for('email.view_sent', message_id=email.message_id) }}"
+                        >
+                          <i class="fas fa-eye me-2"></i>查看
+                        </a>
+                      </li>
+                      <li>
+                        <a
+                          class="dropdown-item"
+                          href="{{ url_for('email.compose') }}?reply_to={{ email.message_id }}"
+                        >
+                          <i class="fas fa-forward me-2"></i>转发
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider" /></li>
+                      <li>
+                        <a
+                          class="dropdown-item text-danger"
+                          href="{{ url_for('email.delete_sent', message_id=email.message_id) }}"
+                          onclick="return confirm('确定要删除此邮件吗？')"
+                        >
+                          <i class="fas fa-trash me-2"></i>删除
+                        </a>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </div>
             </div>

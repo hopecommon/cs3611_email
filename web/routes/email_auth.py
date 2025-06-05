@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from web.email_auth import EmailAuthenticator, EmailUser, load_user_by_email
+from web.simple_email_auth import authenticate_simple_email_user, load_user_by_email
 from email_providers_config import get_provider_config, is_supported_provider
 
 email_auth_bp = Blueprint("email_auth", __name__)
@@ -25,28 +25,14 @@ def email_login():
         f"🔍 邮箱登录页面访问 - 方法: {request.method}, 已认证: {current_user.is_authenticated}"
     )
 
-    # 临时禁用自动重定向，强制显示登录页面
-    # 这样可以避免重定向循环，用户可以手动登录
+    # 如果用户已经登录，直接跳转到dashboard
     if current_user.is_authenticated:
-        print(f"⚠️  用户已登录但强制显示登录页面以避免循环: {current_user.get_id()}")
-        # 暂时注释掉自动重定向
-        # return redirect(url_for("main.dashboard"))
+        print(f"✅ 用户已认证，跳转到dashboard: {current_user.get_id()}")
+        return redirect(url_for("main.dashboard"))
 
-    # 获取最近登录的账户和记住的邮箱
-    try:
-        authenticator = EmailAuthenticator()
-        recent_accounts = authenticator.list_saved_accounts()[:4]  # 最多显示4个
-        print(f"📋 获取到 {len(recent_accounts)} 个最近账户")
-
-        # 获取记住的邮箱地址
-        last_email = session.get("remembered_email", "")
-        remember_email = session.get("remember_email", False)
-        print(f"📧 记住的邮箱: {last_email}, 记住状态: {remember_email}")
-    except Exception as e:
-        print(f"❌ 获取最近账户失败: {e}")
-        recent_accounts = []
-        last_email = ""
-        remember_email = False
+    # 获取记住的邮箱地址
+    remembered_email = session.get("remembered_email", "")
+    remember_email = session.get("remember_email", False)
 
     if request.method == "POST":
         print("📝 处理登录表单提交")
@@ -59,8 +45,7 @@ def email_login():
             flash("请输入邮箱地址和密码", "error")
             return render_template(
                 "auth/email_login.html",
-                recent_accounts=recent_accounts,
-                last_email=last_email,
+                last_email=remembered_email,
                 remember_email=remember_email,
             )
 
@@ -68,8 +53,7 @@ def email_login():
             flash("请输入有效的邮箱地址", "error")
             return render_template(
                 "auth/email_login.html",
-                recent_accounts=recent_accounts,
-                last_email=last_email,
+                last_email=remembered_email,
                 remember_email=remember_email,
             )
 
@@ -79,15 +63,16 @@ def email_login():
             flash(f"暂不支持 {domain} 邮箱，请联系管理员添加支持", "error")
             return render_template(
                 "auth/email_login.html",
-                recent_accounts=recent_accounts,
-                last_email=last_email,
+                last_email=remembered_email,
                 remember_email=remember_email,
             )
 
         # 进行邮箱认证
         try:
             print(f"🔐 开始认证邮箱: {email}")
-            user = authenticator.authenticate(email, password)
+
+            user = authenticate_simple_email_user(email, password)
+
             if user:
                 # 登录成功
                 print(f"✅ 邮箱认证成功: {email}")
@@ -97,6 +82,7 @@ def email_login():
                 if remember:
                     session["remembered_email"] = email
                     session["remember_email"] = True
+                    session.permanent = True  # 使session持久化
                     print(f"💾 已保存邮箱地址到session: {email}")
                 else:
                     session.pop("remembered_email", None)
@@ -104,11 +90,16 @@ def email_login():
                     print("🗑️ 已清除session中的邮箱地址")
 
                 provider_config = get_provider_config(email)
-                flash(f"欢迎使用 {provider_config['name']} 邮箱！", "success")
+                flash(f"欢迎使用 {provider_config['name']} 邮箱！登录成功", "success")
 
-                # 成功后重定向到仪表板
-                print("🔄 认证成功，重定向到仪表板")
-                return redirect(url_for("main.dashboard"))
+                # 获取next参数，如果没有则跳转到dashboard
+                next_page = request.args.get("next")
+                if next_page:
+                    print(f"🔄 跳转到指定页面: {next_page}")
+                    return redirect(next_page)
+                else:
+                    print("🔄 跳转到dashboard")
+                    return redirect(url_for("main.dashboard"))
             else:
                 # 认证失败
                 print(f"❌ 邮箱认证失败: {email}")
@@ -121,13 +112,15 @@ def email_login():
 
         except Exception as e:
             print(f"❌ 登录过程异常: {e}")
+            import traceback
+
+            traceback.print_exc()
             flash(f"登录过程中出现错误：{str(e)}", "error")
 
     print("📄 显示邮箱登录页面")
     return render_template(
         "auth/email_login.html",
-        recent_accounts=recent_accounts,
-        last_email=last_email,
+        last_email=remembered_email,
         remember_email=remember_email,
     )
 
@@ -135,9 +128,6 @@ def email_login():
 @email_auth_bp.route("/clear_session")
 def clear_session():
     """清理session，解决重定向循环问题"""
-    from flask import session
-    from flask_login import logout_user
-
     print("🧹 清理用户session...")
 
     # 登出当前用户
@@ -163,10 +153,13 @@ def logout():
 
     # 清除session但保留邮箱地址（如果用户选择记住）
     if keep_email and remembered_email:
+        # 清除所有数据但保留邮箱地址
+        temp_email = remembered_email
+        temp_remember = True
         session.clear()
-        session["remembered_email"] = remembered_email
-        session["remember_email"] = True
-        print(f"🔄 登出但保留邮箱地址: {remembered_email}")
+        session["remembered_email"] = temp_email
+        session["remember_email"] = temp_remember
+        print(f"🔄 登出但保留邮箱地址: {temp_email}")
     else:
         session.clear()
         print("🗑️ 登出并清除所有session数据")
@@ -188,39 +181,25 @@ def test_connection():
         if not is_supported_provider(email):
             return {"success": False, "message": "不支持的邮箱服务商"}
 
-        # 测试连接
-        authenticator = EmailAuthenticator()
-        user = authenticator.authenticate(email, password)
-
+        # 使用简化认证测试连接
+        user = authenticate_simple_email_user(email, password)
         if user:
             return {
                 "success": True,
-                "message": "邮箱连接测试成功",
+                "message": f"连接成功！支持 {user.provider_name}",
                 "provider": user.provider_name,
             }
         else:
-            return {"success": False, "message": "邮箱认证失败，请检查邮箱地址和授权码"}
+            return {"success": False, "message": "认证失败，请检查邮箱地址和密码"}
 
     except Exception as e:
-        return {"success": False, "message": f"测试过程中出错：{str(e)}"}
+        return {"success": False, "message": f"连接测试失败：{str(e)}"}
 
 
 @email_auth_bp.route("/providers")
 def list_providers():
-    """获取支持的邮箱服务商列表"""
+    """列出支持的邮箱服务商"""
     from email_providers_config import get_all_providers
 
     providers = get_all_providers()
-    provider_list = []
-
-    for domain, config in providers.items():
-        provider_list.append(
-            {
-                "domain": domain,
-                "name": config["name"],
-                "auth_note": config["auth_note"],
-                "help_url": config["help_url"],
-            }
-        )
-
-    return render_template("auth/providers.html", providers=provider_list)
+    return render_template("auth/providers.html", providers=providers)

@@ -106,6 +106,42 @@ body {
   .card-body {
     padding: 1rem;
   }
+
+  /* 移动端邮件列表优化 */
+  .email-item .row {
+    flex-direction: column;
+  }
+
+  .email-item .col-md-1,
+  .email-item .col-md-2,
+  .email-item .col-md-3,
+  .email-item .col-md-6 {
+    width: 100%;
+    margin-bottom: 0.5rem;
+  }
+
+  /* 移动端按钮组优化 */
+  .btn-group {
+    flex-direction: column;
+  }
+
+  .btn-group .btn {
+    margin-bottom: 0.5rem;
+  }
+
+  /* 移动端表单优化 */
+  .row.mb-3 .col-md-2 {
+    margin-bottom: 0.5rem;
+  }
+
+  /* 移动端导航栏优化 */
+  .navbar-nav {
+    text-align: center;
+  }
+
+  .navbar-nav .nav-item {
+    margin-bottom: 0.5rem;
+  }
 }
 
 /* CKEditor样式调整 */
@@ -163,4 +199,58 @@ body {
   top: 50%;
   transform: translateY(-50%);
   color: #6c757d;
+}
+
+/* 仪表板快速操作按钮样式 */
+.btn-lg.h-100 {
+  min-height: 120px;
+  padding: 1rem;
+}
+
+.btn-lg.h-100 i {
+  font-size: 2rem;
+}
+
+/* 邮件统计卡片样式 */
+.card.h-100 {
+  min-height: 120px;
+}
+
+.card.h-100 .card-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* 文本截断样式 */
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 徽章间距 */
+.badge + .badge {
+  margin-left: 0.25rem;
+}
+
+/* 改进的邮件项目样式 */
+.email-item {
+  border-bottom: 1px solid #e9ecef;
+  padding: 1rem;
+  transition: background-color 0.2s;
+}
+
+.email-item:hover {
+  background-color: #f8f9fa;
+}
+
+.email-item.unread {
+  background-color: #fff3cd;
+  border-left: 4px solid #ffc107;
+}
+
+.email-item.spam {
+  background-color: #f8d7da;
+  border-left: 4px solid #dc3545;
 }

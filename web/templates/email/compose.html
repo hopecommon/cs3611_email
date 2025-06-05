@@ -29,10 +29,10 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label fw-bold">收件人 *</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <input
                   type="email"
                   name="to_addresses"
@@ -45,10 +45,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label">抄送</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <input
                   type="email"
                   name="cc_addresses"
@@ -59,10 +59,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label">密送</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <input
                   type="email"
                   name="bcc_addresses"
@@ -73,10 +73,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label fw-bold">主题 *</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <input
                   type="text"
                   name="subject"
@@ -88,10 +88,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label">内容类型</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <select name="content_type" class="form-select">
                   <option value="html">HTML富文本</option>
                   <option value="text">纯文本</option>
@@ -100,10 +100,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label fw-bold">邮件内容 *</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <textarea
                   name="content"
                   class="form-control"
@@ -119,10 +119,10 @@
             </div>
 
             <div class="row mb-3">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label">附件</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <input
                   type="file"
                   name="attachments"
@@ -137,10 +137,10 @@
             </div>
 
             <div class="row mb-4">
-              <div class="col-md-2">
+              <div class="col-12 col-md-2">
                 <label class="form-label">优先级</label>
               </div>
-              <div class="col-md-10">
+              <div class="col-12 col-md-10">
                 <select name="priority" class="form-select">
                   <option value="normal">普通</option>
                   <option value="high">高</option>

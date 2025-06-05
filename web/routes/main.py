@@ -12,12 +12,15 @@ main_bp = Blueprint("main", __name__)
 @main_bp.route("/")
 def index():
     """首页 - 重定向到登录页面"""
+    print(f"🏠 访问首页 - 已认证: {current_user.is_authenticated}")
+
     if current_user.is_authenticated:
+        print(f"✅ 用户已认证，跳转到dashboard: {current_user.get_id()}")
         return redirect(url_for("main.dashboard"))
 
-    # 强制重定向到邮箱登录页面
-    print("🔍 重定向到邮箱登录页面...")
-    return redirect("/auth/email_login")
+    # 用户未认证，重定向到邮箱登录页面
+    print("🔍 用户未认证，重定向到邮箱登录页面...")
+    return redirect(url_for("email_auth.email_login"))
 
 
 @main_bp.route("/dashboard")

@@ -33,30 +33,40 @@
             class="email-item {% if not email.is_read %}unread{% endif %} {% if email.is_spam %}spam{% endif %}"
           >
             <div class="row align-items-center">
-              <div class="col-md-1">
+              <div class="col-1 col-md-1">
                 <input
                   type="checkbox"
                   class="form-check-input"
                   value="{{ email.message_id }}"
                 />
               </div>
-              <div class="col-md-3">
-                <strong>{{ email.from_addr }}</strong>
-                {% if email.is_spam %}
-                <span class="badge bg-danger ms-2">垃圾邮件</span>
-                {% endif %} {% if not email.is_read %}
-                <span class="badge bg-warning ms-2">未读</span>
-                {% endif %}
+              <div class="col-11 col-md-3">
+                <div
+                  class="d-flex flex-column flex-md-row align-items-start align-items-md-center"
+                >
+                  <strong class="text-truncate me-2"
+                    >{{ email.from_addr }}</strong
+                  >
+                  <div class="d-flex gap-1 mt-1 mt-md-0">
+                    {% if email.is_spam %}
+                    <span class="badge bg-danger">垃圾邮件</span>
+                    {% endif %} {% if not email.is_read %}
+                    <span class="badge bg-warning">未读</span>
+                    {% endif %}
+                  </div>
+                </div>
               </div>
-              <div class="col-md-6">
+              <div class="col-12 col-md-6 mt-2 mt-md-0">
                 <a
                   href="{{ url_for('email.view', message_id=email.message_id) }}"
                   class="text-decoration-none text-dark"
                 >
-                  {{ email.subject or '(无主题)' }}
+                  <div class="text-truncate">
+                    {{ email.subject or '(无主题)' }}
+                  </div>
                 </a>
               </div>
-              <div class="col-md-2 text-end">
+              <div class="col-12 col-md-2 text-start text-md-end mt-1 mt-md-0">
                 <small class="text-muted">
                   {% if email.date %} {% if email.date.strftime %} {{
                   email.date.strftime('%m-%d %H:%M') }} {% else %} {{ email.date
@@ -119,4 +129,118 @@
     </div>
   </div>
 </div>
+
+<!-- 密码重新输入模态框 -->
+<div
+  class="modal fade"
+  id="passwordModal"
+  tabindex="-1"
+  aria-labelledby="passwordModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="passwordModalLabel">
+          <i class="fas fa-key me-2"></i>重新验证邮箱密码
+        </h5>
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+          aria-label="Close"
+        ></button>
+      </div>
+      <div class="modal-body">
+        <form id="passwordForm">
+          <div class="mb-3">
+            <label for="emailPassword" class="form-label">邮箱密码</label>
+            <input
+              type="password"
+              class="form-control"
+              id="emailPassword"
+              placeholder="请输入您的邮箱密码"
+              required
+            />
+            <div class="form-text">为了安全，需要重新验证您的邮箱密码</div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          取消
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onclick="submitPassword()"
+        >
+          <i class="fas fa-check me-1"></i>确认并刷新邮件
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 检查是否需要显示密码输入框
+  document.addEventListener("DOMContentLoaded", function () {
+    // 检查URL参数或flash消息中是否包含需要重新登录的提示
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("needs_auth") === "true") {
+      const passwordModal = new bootstrap.Modal(
+        document.getElementById("passwordModal")
+      );
+      passwordModal.show();
+    }
+  });
+
+  function submitPassword() {
+    const password = document.getElementById("emailPassword").value;
+    if (!password) {
+      alert("请输入密码");
+      return;
+    }
+
+    const submitBtn = event.target;
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML =
+      '<i class="fas fa-spinner fa-spin me-1"></i>验证中...';
+    submitBtn.disabled = true;
+
+    // 发送密码验证请求
+    fetch("/api/email/reauth", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        password: password,
+      }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.success) {
+          // 关闭模态框
+          const passwordModal = bootstrap.Modal.getInstance(
+            document.getElementById("passwordModal")
+          );
+          passwordModal.hide();
+
+          // 刷新页面或重新拉取邮件
+          window.location.href = "/email/refresh_inbox";
+        } else {
+          alert("密码验证失败: " + data.error);
+        }
+      })
+      .catch((error) => {
+        console.error("验证失败:", error);
+        alert("验证时出错");
+      })
+      .finally(() => {
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+      });
+  }
+</script>
 {% endblock %}

@@ -10,8 +10,9 @@ EMAIL_PROVIDERS = {
         "name": "QQ邮箱",
         "smtp": {
             "host": "smtp.qq.com",
-            "port": 587,
-            "use_tls": True,
+            "port": 465,
+            "use_ssl": True,
+            "use_tls": False,
         },
         "pop3": {
             "host": "pop.qq.com",

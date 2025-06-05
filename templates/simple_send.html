@@ -1,0 +1,514 @@
+{% extends "base.html" %} {% block title %}发送邮件 - 邮件客户端{% endblock %}
+{% block head %}
+<style>
+  .file-drop-area {
+    border: 2px dashed #dee2e6 !important;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .file-drop-area:hover {
+    border-color: #0d6efd !important;
+    background-color: #f8f9fa;
+  }
+
+  .file-drop-area.border-primary {
+    border-color: #0d6efd !important;
+    background-color: #e7f1ff !important;
+  }
+
+  .file-drop-area .fa-cloud-upload-alt {
+    opacity: 0.6;
+    transition: opacity 0.3s ease;
+  }
+
+  .file-drop-area:hover .fa-cloud-upload-alt {
+    opacity: 1;
+  }
+
+  #fileList .list-group-item {
+    border-left: 4px solid #0d6efd;
+    margin-bottom: 5px;
+  }
+
+  #fileList .list-group-item:hover {
+    background-color: #f8f9fa;
+  }
+
+  .file-size-warning {
+    color: #dc3545 !important;
+    font-weight: bold;
+  }
+</style>
+{% endblock %} {% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title"><i class="fas fa-paper-plane"></i> 发送邮件</h3>
+
+        {% if account %}
+        <div class="alert alert-info">
+          <i class="fas fa-user"></i> 发件人:
+          <strong>{{ account.display_name or account.email }}</strong> &lt;{{
+          account.email }}&gt;
+        </div>
+        {% endif %}
+
+        <form method="POST" enctype="multipart/form-data">
+          <!-- 收件人信息 -->
+          <div class="row mb-3">
+            <div class="col-md-12">
+              <label for="to_addresses" class="form-label">
+                <i class="fas fa-envelope"></i> 收件人 *
+              </label>
+              <input
+                type="text"
+                class="form-control"
+                id="to_addresses"
+                name="to_addresses"
+                required
+                placeholder="收件人邮箱地址，多个收件人用逗号分隔"
+              />
+              <div class="form-text">
+                示例: user1@example.com, user2@example.com
+              </div>
+            </div>
+          </div>
+
+          <div class="row mb-3">
+            <div class="col-md-6">
+              <label for="cc_addresses" class="form-label">
+                <i class="fas fa-copy"></i> 抄送 (可选)
+              </label>
+              <input
+                type="text"
+                class="form-control"
+                id="cc_addresses"
+                name="cc_addresses"
+                placeholder="抄送邮箱地址，多个用逗号分隔"
+              />
+            </div>
+            <div class="col-md-6">
+              <label for="bcc_addresses" class="form-label">
+                <i class="fas fa-eye-slash"></i> 密送 (可选)
+              </label>
+              <input
+                type="text"
+                class="form-control"
+                id="bcc_addresses"
+                name="bcc_addresses"
+                placeholder="密送邮箱地址，多个用逗号分隔"
+              />
+            </div>
+          </div>
+
+          <!-- 邮件主题 -->
+          <div class="mb-3">
+            <label for="subject" class="form-label">
+              <i class="fas fa-tag"></i> 主题 *
+            </label>
+            <input
+              type="text"
+              class="form-control"
+              id="subject"
+              name="subject"
+              required
+              placeholder="邮件主题"
+            />
+          </div>
+
+          <!-- 邮件内容 -->
+          <div class="mb-3">
+            <label for="content" class="form-label">
+              <i class="fas fa-edit"></i> 邮件内容 *
+            </label>
+            <textarea
+              class="form-control"
+              id="content"
+              name="content"
+              rows="10"
+              required
+              placeholder="请输入邮件正文内容..."
+            ></textarea>
+          </div>
+
+          <!-- 附件 -->
+          <div class="mb-3">
+            <label for="attachments" class="form-label">
+              <i class="fas fa-paperclip"></i> 附件 (可选)
+            </label>
+
+            <!-- 拖拽上传区域 -->
+            <div
+              class="file-drop-area border rounded p-4 text-center mb-3"
+              id="fileDropArea"
+            >
+              <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+              <p class="mb-2">拖拽文件到此处或点击选择文件</p>
+              <input
+                type="file"
+                class="form-control d-none"
+                id="attachments"
+                name="attachments"
+                multiple
+                accept="*/*"
+              />
+              <button
+                type="button"
+                class="btn btn-outline-primary"
+                onclick="document.getElementById('attachments').click()"
+              >
+                <i class="fas fa-folder-open"></i> 选择文件
+              </button>
+              <div class="form-text mt-2">
+                支持多个文件，单个文件最大 10MB，总大小不超过 25MB
+              </div>
+            </div>
+
+            <!-- 选中的文件列表 -->
+            <div id="selectedFiles" class="d-none">
+              <h6><i class="fas fa-list"></i> 已选择的文件:</h6>
+              <div id="fileList" class="list-group"></div>
+              <div class="mt-2">
+                <small class="text-muted">
+                  <span id="totalFiles">0</span> 个文件，总大小:
+                  <span id="totalSize">0 KB</span>
+                </small>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger ms-2"
+                  onclick="clearAllFiles()"
+                >
+                  <i class="fas fa-trash"></i> 清空所有文件
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 按钮 -->
+          <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+            <a href="{{ url_for('index') }}" class="btn btn-secondary me-md-2">
+              <i class="fas fa-arrow-left"></i> 返回首页
+            </a>
+            <button
+              type="button"
+              class="btn btn-outline-primary me-md-2"
+              onclick="clearForm()"
+            >
+              <i class="fas fa-eraser"></i> 清空
+            </button>
+            <button type="submit" class="btn btn-primary" id="sendBtn">
+              <i class="fas fa-paper-plane"></i> 发送邮件
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 发送状态提示 -->
+<div class="row justify-content-center mt-4">
+  <div class="col-md-10">
+    <div class="card">
+      <div class="card-body">
+        <h5><i class="fas fa-info-circle"></i> 发送提示</h5>
+        <div class="row">
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-envelope-open-text fa-2x text-primary mb-2"></i>
+              <h6>支持纯文本</h6>
+              <p class="text-muted small">当前版本支持纯文本邮件发送</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-paperclip fa-2x text-success mb-2"></i>
+              <h6>支持附件</h6>
+              <p class="text-muted small">可以添加多个文件作为附件</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-shield-alt fa-2x text-info mb-2"></i>
+              <h6>基于CLI</h6>
+              <p class="text-muted small">使用经过验证的CLI底层逻辑</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  // 文件管理相关变量
+  let selectedFiles = [];
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const MAX_TOTAL_SIZE = 25 * 1024 * 1024; // 25MB
+
+  function clearForm() {
+    if (confirm("确定要清空所有内容吗？")) {
+      document.getElementById("to_addresses").value = "";
+      document.getElementById("cc_addresses").value = "";
+      document.getElementById("bcc_addresses").value = "";
+      document.getElementById("subject").value = "";
+      document.getElementById("content").value = "";
+      clearAllFiles();
+    }
+  }
+
+  // 清空所有文件
+  function clearAllFiles() {
+    selectedFiles = [];
+    document.getElementById("attachments").value = "";
+    updateFileDisplay();
+  }
+
+  // 移除单个文件
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    updateFileDisplay();
+    updateFileInput();
+  }
+
+  // 格式化文件大小
+  function formatFileSize(bytes) {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+  }
+
+  // 更新文件显示
+  function updateFileDisplay() {
+    const selectedFilesDiv = document.getElementById("selectedFiles");
+    const fileListDiv = document.getElementById("fileList");
+    const totalFilesSpan = document.getElementById("totalFiles");
+    const totalSizeSpan = document.getElementById("totalSize");
+
+    if (selectedFiles.length === 0) {
+      selectedFilesDiv.classList.add("d-none");
+      return;
+    }
+
+    selectedFilesDiv.classList.remove("d-none");
+
+    // 计算总大小
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    totalFilesSpan.textContent = selectedFiles.length;
+    totalSizeSpan.textContent = formatFileSize(totalSize);
+
+    // 生成文件列表HTML
+    const fileListHTML = selectedFiles
+      .map(
+        (file, index) => `
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center">
+            <i class="fas fa-file-alt me-2"></i>
+            <div>
+              <div class="fw-bold">${file.name}</div>
+              <small class="text-muted">${formatFileSize(file.size)}</small>
+              ${
+                file.size > MAX_FILE_SIZE
+                  ? '<br><small class="text-danger">⚠️ 文件过大</small>'
+                  : ""
+              }
+            </div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile(${index})">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `
+      )
+      .join("");
+
+    fileListDiv.innerHTML = fileListHTML;
+
+    // 显示总大小警告
+    if (totalSize > MAX_TOTAL_SIZE) {
+      totalSizeSpan.className = "text-danger fw-bold";
+      totalSizeSpan.innerHTML +=
+        ' <i class="fas fa-exclamation-triangle" title="总大小超出限制"></i>';
+    } else {
+      totalSizeSpan.className = "";
+    }
+  }
+
+  // 更新文件输入控件
+  function updateFileInput() {
+    const dt = new DataTransfer();
+    selectedFiles.forEach((file) => dt.items.add(file));
+    document.getElementById("attachments").files = dt.files;
+  }
+
+  // 添加文件到列表
+  function addFiles(files) {
+    const newFiles = Array.from(files);
+    let hasError = false;
+    let errorMessages = [];
+
+    newFiles.forEach((file) => {
+      // 检查文件大小
+      if (file.size > MAX_FILE_SIZE) {
+        errorMessages.push(
+          `${file.name} 超过单个文件大小限制 (${formatFileSize(MAX_FILE_SIZE)})`
+        );
+        hasError = true;
+        return;
+      }
+
+      // 检查是否已存在同名文件
+      if (
+        selectedFiles.some((existingFile) => existingFile.name === file.name)
+      ) {
+        errorMessages.push(`${file.name} 已存在`);
+        hasError = true;
+        return;
+      }
+
+      selectedFiles.push(file);
+    });
+
+    // 检查总大小
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+      errorMessages.push(
+        `总文件大小超过限制 (${formatFileSize(MAX_TOTAL_SIZE)})`
+      );
+      hasError = true;
+    }
+
+    if (hasError) {
+      alert("文件添加失败:\n" + errorMessages.join("\n"));
+    }
+
+    updateFileDisplay();
+    updateFileInput();
+  }
+
+  // 文件选择事件
+  document
+    .getElementById("attachments")
+    .addEventListener("change", function (e) {
+      if (e.target.files.length > 0) {
+        addFiles(e.target.files);
+      }
+    });
+
+  // 拖拽上传功能
+  const fileDropArea = document.getElementById("fileDropArea");
+
+  ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+    fileDropArea.addEventListener(eventName, preventDefaults, false);
+    document.body.addEventListener(eventName, preventDefaults, false);
+  });
+
+  ["dragenter", "dragover"].forEach((eventName) => {
+    fileDropArea.addEventListener(eventName, highlight, false);
+  });
+
+  ["dragleave", "drop"].forEach((eventName) => {
+    fileDropArea.addEventListener(eventName, unhighlight, false);
+  });
+
+  fileDropArea.addEventListener("drop", handleDrop, false);
+
+  function preventDefaults(e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function highlight(e) {
+    fileDropArea.classList.add("border-primary", "bg-light");
+  }
+
+  function unhighlight(e) {
+    fileDropArea.classList.remove("border-primary", "bg-light");
+  }
+
+  function handleDrop(e) {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    addFiles(files);
+  }
+
+  // 表单提交前验证
+  document.querySelector("form").addEventListener("submit", function (e) {
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    const hasOversizedFiles = selectedFiles.some(
+      (file) => file.size > MAX_FILE_SIZE
+    );
+
+    if (hasOversizedFiles || totalSize > MAX_TOTAL_SIZE) {
+      e.preventDefault();
+      alert("请解决文件大小问题后再发送邮件");
+      return;
+    }
+
+    const sendBtn = document.getElementById("sendBtn");
+    sendBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 发送中...';
+    sendBtn.disabled = true;
+  });
+
+  // 邮箱地址验证
+  function validateEmails(input) {
+    const emails = input.value
+      .split(",")
+      .map((email) => email.trim())
+      .filter((email) => email);
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const invalidEmails = emails.filter((email) => !emailRegex.test(email));
+
+    if (invalidEmails.length > 0) {
+      input.setCustomValidity("无效的邮箱地址: " + invalidEmails.join(", "));
+    } else {
+      input.setCustomValidity("");
+    }
+  }
+
+  document.getElementById("to_addresses").addEventListener("blur", function () {
+    validateEmails(this);
+  });
+
+  document.getElementById("cc_addresses").addEventListener("blur", function () {
+    if (this.value.trim()) {
+      validateEmails(this);
+    }
+  });
+
+  document
+    .getElementById("bcc_addresses")
+    .addEventListener("blur", function () {
+      if (this.value.trim()) {
+        validateEmails(this);
+      }
+    });
+
+  // 处理URL参数（用于回复邮件功能）
+  document.addEventListener("DOMContentLoaded", function () {
+    const urlParams = new URLSearchParams(window.location.search);
+    const toParam = urlParams.get("to");
+    const subjectParam = urlParams.get("subject");
+    const contentParam = urlParams.get("content");
+
+    if (toParam && document.getElementById("to_addresses")) {
+      document.getElementById("to_addresses").value = toParam;
+    }
+    if (subjectParam && document.getElementById("subject")) {
+      document.getElementById("subject").value = subjectParam;
+    }
+    if (contentParam && document.getElementById("content")) {
+      document.getElementById("content").value = contentParam;
+    }
+  });
+</script>
+{% endblock %}

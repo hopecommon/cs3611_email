@@ -33,7 +33,7 @@ from server.user_auth import UserAuth
 # 尝试导入新的邮箱认证系统
 try:
     from web.routes.email_auth import email_auth_bp
-    from web.email_auth import load_user_by_email
+    from web.simple_email_auth import load_user_by_email, get_user_by_id
 
     EMAIL_AUTH_AVAILABLE = True
     print("✅ 邮箱认证系统导入成功")
@@ -42,6 +42,7 @@ except ImportError as e:
     EMAIL_AUTH_AVAILABLE = False
     email_auth_bp = None
     load_user_by_email = None
+    get_user_by_id = None
 
 
 def create_app(config_name="development"):
@@ -92,9 +93,9 @@ def create_app(config_name="development"):
             print(f"🔍 尝试加载用户: {user_id}")
 
             # 优先尝试邮箱用户加载器
-            if EMAIL_AUTH_AVAILABLE and load_user_by_email:
+            if EMAIL_AUTH_AVAILABLE and get_user_by_id:
                 try:
-                    user = load_user_by_email(user_id)
+                    user = get_user_by_id(user_id)
                     if user:
                         print(f"✅ 邮箱用户加载成功: {user_id}")
                         return user
@@ -102,6 +103,16 @@ def create_app(config_name="development"):
                         print(f"⚠️  邮箱用户未找到: {user_id}")
                 except Exception as e:
                     print(f"❌ 邮箱用户加载失败: {e}")
+
+            # 如果用户ID看起来像邮箱地址，尝试直接用作邮箱地址
+            if EMAIL_AUTH_AVAILABLE and load_user_by_email and "@" in user_id:
+                try:
+                    user = load_user_by_email(user_id)
+                    if user:
+                        print(f"✅ 邮箱用户（按邮箱）加载成功: {user_id}")
+                        return user
+                except Exception as e:
+                    print(f"❌ 邮箱用户（按邮箱）加载失败: {e}")
 
             # 后备：尝试原有的WebUser加载器（为了兼容性）
             try:

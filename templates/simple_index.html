@@ -1,0 +1,142 @@
+{% extends "base.html" %} {% block title %}首页 - 邮件客户端{% endblock %} {%
+block content %}
+<div class="row">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title">
+          <i class="fas fa-home"></i> 欢迎使用邮件客户端
+        </h3>
+
+        {% if account %}
+        <div class="row mt-4">
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-body">
+                <h5><i class="fas fa-user"></i> 当前账户</h5>
+                <p><strong>邮箱:</strong> {{ account.email }}</p>
+                <p>
+                  <strong>显示名:</strong> {{ account.display_name or '未设置'
+                  }}
+                </p>
+                <p><strong>服务商:</strong> {{ account.provider }}</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card bg-light">
+              <div class="card-body">
+                <h5><i class="fas fa-info-circle"></i> 功能说明</h5>
+                <ul class="list-unstyled">
+                  <li>
+                    <i class="fas fa-check text-success"></i> 基于CLI底层实现
+                  </li>
+                  <li><i class="fas fa-check text-success"></i> 无复杂封装</li>
+                  <li><i class="fas fa-check text-success"></i> 稳定可靠</li>
+                  <li><i class="fas fa-check text-success"></i> 支持附件</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-body">
+        <h5 class="card-title"><i class="fas fa-bolt"></i> 快速操作</h5>
+
+        <div class="d-grid gap-2">
+          <a href="{{ url_for('send_email_page') }}" class="btn btn-primary">
+            <i class="fas fa-paper-plane"></i> 发送邮件
+          </a>
+          <a
+            href="{{ url_for('receive_emails_page') }}"
+            class="btn btn-success"
+          >
+            <i class="fas fa-inbox"></i> 接收邮件
+          </a>
+          <a href="{{ url_for('add_account') }}" class="btn btn-info">
+            <i class="fas fa-plus"></i> 添加账户
+          </a>
+          <button class="btn btn-secondary" onclick="checkStatus()">
+            <i class="fas fa-heart-pulse"></i> 检查状态
+          </button>
+        </div>
+
+        <div id="status-info" class="mt-3"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row mt-4">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-body">
+        <h5><i class="fas fa-lightbulb"></i> 使用提示</h5>
+        <div class="row">
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-cog fa-2x text-primary mb-2"></i>
+              <h6>第一步：添加账户</h6>
+              <p class="text-muted small">配置您的邮箱SMTP和POP3设置</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-paper-plane fa-2x text-success mb-2"></i>
+              <h6>第二步：发送邮件</h6>
+              <p class="text-muted small">支持文本邮件和附件发送</p>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="text-center">
+              <i class="fas fa-inbox fa-2x text-info mb-2"></i>
+              <h6>第三步：接收邮件</h6>
+              <p class="text-muted small">查看最新接收的邮件</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  function checkStatus() {
+    fetch("/api/status")
+      .then((response) => response.json())
+      .then((data) => {
+        const statusDiv = document.getElementById("status-info");
+        if (data.authenticated) {
+          statusDiv.innerHTML = `
+                    <div class="alert alert-success">
+                        <strong>状态正常</strong><br>
+                        SMTP: ${
+                          data.smtp_available ? "✅ 可用" : "❌ 不可用"
+                        }<br>
+                        POP3: ${data.pop3_available ? "✅ 可用" : "❌ 不可用"}
+                    </div>
+                `;
+        } else {
+          statusDiv.innerHTML = `
+                    <div class="alert alert-warning">
+                        <strong>未认证</strong>
+                    </div>
+                `;
+        }
+      })
+      .catch((error) => {
+        document.getElementById("status-info").innerHTML = `
+                <div class="alert alert-danger">
+                    <strong>检查失败:</strong> ${error.message}
+                </div>
+            `;
+      });
+  }
+</script>
+{% endblock %}

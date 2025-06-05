@@ -1,0 +1,594 @@
+{% extends "base.html" %} {% block title %}添加账户 - 邮件客户端{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-10 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <h3 class="card-title mb-4">
+          <i class="fas fa-plus text-primary"></i> 添加邮箱账户
+        </h3>
+        <p class="text-muted mb-4">
+          输入邮箱地址，我们将自动为您配置服务器设置
+        </p>
+
+        <form method="POST" id="addAccountForm">
+          <!-- 第一步：邮箱地址检测 -->
+          <div class="step" id="step1">
+            <h5 class="mb-4">
+              <i class="fas fa-envelope text-info"></i> 第一步：邮箱地址
+            </h5>
+
+            <div class="row">
+              <div class="col-md-12">
+                <div class="mb-3">
+                  <label for="email" class="form-label">邮箱地址 *</label>
+                  <input
+                    type="email"
+                    class="form-control form-control-lg"
+                    id="email"
+                    name="email"
+                    required
+                    placeholder="例：your@qq.com"
+                  />
+                  <div class="form-text">输入邮箱地址后将自动识别配置</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label for="display_name" class="form-label">显示名称</label>
+              <input
+                type="text"
+                class="form-control"
+                id="display_name"
+                name="display_name"
+                placeholder="您的姓名（可选）"
+              />
+            </div>
+
+            <!-- 自动识别结果 -->
+            <div id="detectionResult" class="mt-3" style="display: none"></div>
+          </div>
+
+          <!-- 第二步：服务器配置 -->
+          <div class="step" id="step2" style="display: none">
+            <hr class="my-4" />
+            <h5 class="mb-4">
+              <i class="fas fa-cog text-success"></i> 第二步：服务器配置
+            </h5>
+
+            <!-- 服务商选择 -->
+            <div class="mb-4">
+              <label for="provider" class="form-label">邮箱服务商</label>
+              <select class="form-select" id="provider" name="provider">
+                <option value="">正在检测...</option>
+              </select>
+            </div>
+
+            <!-- SMTP配置 -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <h6 class="text-primary">
+                  <i class="fas fa-paper-plane"></i> SMTP配置（发送邮件）
+                </h6>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="smtp_host" class="form-label">SMTP服务器 *</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="smtp_host"
+                    name="smtp_host"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="mb-3">
+                  <label for="smtp_port" class="form-label">端口 *</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="smtp_port"
+                    name="smtp_port"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check mt-4 pt-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="smtp_ssl"
+                    name="smtp_ssl"
+                    checked
+                  />
+                  <label class="form-check-label" for="smtp_ssl">使用SSL</label>
+                </div>
+              </div>
+            </div>
+
+            <!-- POP3配置 -->
+            <div class="row mb-4">
+              <div class="col-12">
+                <h6 class="text-success">
+                  <i class="fas fa-inbox"></i> POP3配置（接收邮件）
+                </h6>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="pop3_host" class="form-label">POP3服务器 *</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="pop3_host"
+                    name="pop3_host"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="mb-3">
+                  <label for="pop3_port" class="form-label">端口 *</label>
+                  <input
+                    type="number"
+                    class="form-control"
+                    id="pop3_port"
+                    name="pop3_port"
+                    required
+                  />
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-check mt-4 pt-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="pop3_ssl"
+                    name="pop3_ssl"
+                    checked
+                  />
+                  <label class="form-check-label" for="pop3_ssl">使用SSL</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 第三步：账户认证 -->
+          <div class="step" id="step3" style="display: none">
+            <hr class="my-4" />
+            <h5 class="mb-4">
+              <i class="fas fa-key text-warning"></i> 第三步：账户认证
+            </h5>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="smtp_username" class="form-label">用户名 *</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="smtp_username"
+                    name="smtp_username"
+                    required
+                  />
+                  <div class="form-text">通常是您的邮箱地址</div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="mb-3">
+                  <label for="smtp_password" class="form-label"
+                    >密码/授权码 *</label
+                  >
+                  <input
+                    type="password"
+                    class="form-control"
+                    id="smtp_password"
+                    name="smtp_password"
+                    required
+                  />
+                  <div class="form-text" id="passwordHint">
+                    请输入邮箱密码或授权码
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 重要提示区域 -->
+            <div
+              id="providerNotes"
+              class="alert alert-warning"
+              style="display: none"
+            >
+              <h6><i class="fas fa-exclamation-triangle"></i> 重要提示</h6>
+              <div id="notesContent"></div>
+            </div>
+
+            <!-- 同步用户名密码 -->
+            <input type="hidden" id="pop3_username" name="pop3_username" />
+            <input type="hidden" id="pop3_password" name="pop3_password" />
+            <input
+              type="hidden"
+              id="auth_method"
+              name="auth_method"
+              value="AUTO"
+            />
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="d-flex justify-content-between align-items-center mt-4">
+            <a
+              href="{{ url_for('login') }}"
+              class="btn btn-outline-secondary btn-lg"
+            >
+              <i class="fas fa-arrow-left"></i> 返回登录
+            </a>
+
+            <div>
+              <button
+                type="button"
+                class="btn btn-outline-primary btn-lg me-3"
+                id="prevBtn"
+                onclick="prevStep()"
+                style="display: none"
+              >
+                <i class="fas fa-chevron-left"></i> 上一步
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary btn-lg"
+                id="nextBtn"
+                onclick="nextStep()"
+                disabled
+              >
+                下一步 <i class="fas fa-chevron-right"></i>
+              </button>
+              <button
+                type="submit"
+                class="btn btn-success btn-lg"
+                id="submitBtn"
+                style="display: none"
+              >
+                <i class="fas fa-save"></i> 保存账户
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 检测进度提示 -->
+<div class="row justify-content-center mt-4">
+  <div class="col-md-10 col-lg-8">
+    <div class="card">
+      <div class="card-body">
+        <h6><i class="fas fa-lightbulb text-info"></i> 智能配置说明</h6>
+        <div class="row">
+          <div class="col-md-4 text-center">
+            <i class="fas fa-magic fa-2x text-primary mb-2"></i>
+            <h6>自动识别</h6>
+            <p class="small text-muted">根据邮箱后缀自动识别服务商</p>
+          </div>
+          <div class="col-md-4 text-center">
+            <i class="fas fa-cogs fa-2x text-success mb-2"></i>
+            <h6>智能配置</h6>
+            <p class="small text-muted">自动填写服务器设置</p>
+          </div>
+          <div class="col-md-4 text-center">
+            <i class="fas fa-shield-check fa-2x text-info mb-2"></i>
+            <h6>安全可靠</h6>
+            <p class="small text-muted">基于官方推荐配置</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  let currentStep = 1;
+  let totalSteps = 3;
+  let detectedProvider = null;
+  let detectTimer = null; // 防抖定时器
+
+  // 邮箱地址输入监听 - 增加自动检测功能
+  document.getElementById("email").addEventListener("input", function () {
+    const email = this.value.trim();
+    const nextBtn = document.getElementById("nextBtn");
+
+    if (email && email.includes("@")) {
+      nextBtn.disabled = false;
+      // 自动同步到用户名字段
+      document.getElementById("smtp_username").value = email;
+      document.getElementById("pop3_username").value = email;
+
+      // 自动填充显示名
+      if (!document.getElementById("display_name").value) {
+        document.getElementById("display_name").value = email.split("@")[0];
+      }
+
+      // 防抖自动检测 - 500ms后自动检测
+      clearTimeout(detectTimer);
+      detectTimer = setTimeout(() => {
+        autoDetectProvider(email);
+      }, 500);
+    } else {
+      nextBtn.disabled = true;
+      // 清除检测结果
+      const resultDiv = document.getElementById("detectionResult");
+      resultDiv.style.display = "none";
+      detectedProvider = null;
+    }
+  });
+
+  // 密码同步
+  document
+    .getElementById("smtp_password")
+    .addEventListener("input", function () {
+      document.getElementById("pop3_password").value = this.value;
+    });
+
+  // 自动检测邮箱服务商
+  async function autoDetectProvider(email) {
+    const resultDiv = document.getElementById("detectionResult");
+    resultDiv.style.display = "block";
+    resultDiv.innerHTML =
+      '<div class="alert alert-info"><i class="fas fa-spinner fa-spin"></i> 正在自动检测邮箱服务商...</div>';
+
+    try {
+      const response = await fetch("/api/detect_provider", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        if (data.detected) {
+          detectedProvider = data;
+          resultDiv.innerHTML = `
+            <div class="alert alert-success">
+              <h6><i class="fas fa-check-circle"></i> 自动识别成功</h6>
+              <p class="mb-2">检测到：<strong>${data.provider_name}</strong></p>
+              <p class="mb-1"><small class="text-success">✓ SMTP: ${data.smtp_config.host}:${data.smtp_config.port}</small></p>
+              <p class="mb-2"><small class="text-success">✓ POP3: ${data.pop3_config.host}:${data.pop3_config.port}</small></p>
+              <p class="mb-0"><small class="text-muted">点击"继续设置"直接进入账户认证步骤</small></p>
+            </div>
+          `;
+          // 更新按钮状态
+          updateButtons();
+        } else {
+          detectedProvider = null;
+          resultDiv.innerHTML = `
+            <div class="alert alert-warning">
+              <h6><i class="fas fa-exclamation-triangle"></i> 未能自动识别</h6>
+              <p class="mb-2">${
+                data.message || "未找到匹配的邮箱服务商配置"
+              }</p>
+              <p class="mb-0"><small class="text-muted">点击"手动配置"进入服务器设置步骤</small></p>
+            </div>
+          `;
+          // 更新按钮状态
+          updateButtons();
+        }
+      } else {
+        resultDiv.innerHTML = `
+          <div class="alert alert-danger">
+            <h6><i class="fas fa-times-circle"></i> 检测失败</h6>
+            <p class="mb-0">${data.error}</p>
+          </div>
+        `;
+      }
+    } catch (error) {
+      resultDiv.innerHTML = `
+        <div class="alert alert-danger">
+          <h6><i class="fas fa-times-circle"></i> 网络错误</h6>
+          <p class="mb-0">无法连接到服务器，请检查网络连接</p>
+        </div>
+      `;
+    }
+  }
+
+  // 下一步
+  function nextStep() {
+    if (currentStep === 1) {
+      // 检查是否有自动识别结果
+      if (detectedProvider && detectedProvider.detected) {
+        // 自动识别成功，直接跳到认证步骤
+        loadProviderConfig();
+        currentStep = 2; // 跳到第3步（认证）
+        document.getElementById("step1").style.display = "none";
+        document.getElementById("step3").style.display = "block";
+        updateButtons();
+        return;
+      } else {
+        // 没有自动识别或识别失败，进入手动配置步骤
+        loadProviderConfig();
+      }
+    }
+
+    if (currentStep < totalSteps) {
+      document.getElementById(`step${currentStep}`).style.display = "none";
+      currentStep++;
+      document.getElementById(`step${currentStep}`).style.display = "block";
+
+      updateButtons();
+    }
+  }
+
+  // 上一步
+  function prevStep() {
+    // 如果当前在认证步骤，且有自动识别结果，直接返回到邮箱输入步骤
+    if (currentStep === 3 && detectedProvider && detectedProvider.detected) {
+      document.getElementById("step3").style.display = "none";
+      currentStep = 1;
+      document.getElementById("step1").style.display = "block";
+      updateButtons();
+      return;
+    }
+
+    if (currentStep > 1) {
+      document.getElementById(`step${currentStep}`).style.display = "none";
+      currentStep--;
+      document.getElementById(`step${currentStep}`).style.display = "block";
+
+      updateButtons();
+    }
+  }
+
+  // 更新按钮状态
+  function updateButtons() {
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const submitBtn = document.getElementById("submitBtn");
+
+    // 根据当前步骤和是否有自动识别结果来调整按钮显示
+    if (currentStep === 1) {
+      prevBtn.style.display = "none";
+      nextBtn.style.display = "inline-block";
+      submitBtn.style.display = "none";
+
+      // 更新下一步按钮文字
+      if (detectedProvider && detectedProvider.detected) {
+        nextBtn.innerHTML = '继续设置 <i class="fas fa-chevron-right"></i>';
+      } else {
+        nextBtn.innerHTML = '手动配置 <i class="fas fa-chevron-right"></i>';
+      }
+    } else if (currentStep === totalSteps) {
+      prevBtn.style.display = "inline-block";
+      nextBtn.style.display = "none";
+      submitBtn.style.display = "inline-block";
+    } else {
+      prevBtn.style.display = "inline-block";
+      nextBtn.style.display = "inline-block";
+      submitBtn.style.display = "none";
+      nextBtn.innerHTML = '下一步 <i class="fas fa-chevron-right"></i>';
+    }
+  }
+
+  // 加载服务商配置
+  function loadProviderConfig() {
+    if (detectedProvider && detectedProvider.detected) {
+      // 使用检测到的配置
+      fillConfiguration(detectedProvider);
+    } else {
+      // 加载默认配置选项
+      loadProviderOptions();
+    }
+  }
+
+  // 填充配置信息
+  function fillConfiguration(provider) {
+    // 更新服务商选择
+    const providerSelect = document.getElementById("provider");
+    providerSelect.innerHTML = `<option value="${provider.provider_id}" selected>${provider.provider_name}</option>`;
+
+    // 填充SMTP配置
+    if (provider.smtp_config) {
+      document.getElementById("smtp_host").value = provider.smtp_config.host;
+      document.getElementById("smtp_port").value = provider.smtp_config.port;
+      document.getElementById("smtp_ssl").checked =
+        provider.smtp_config.use_ssl;
+    }
+
+    // 填充POP3配置
+    if (provider.pop3_config) {
+      document.getElementById("pop3_host").value = provider.pop3_config.host;
+      document.getElementById("pop3_port").value = provider.pop3_config.port;
+      document.getElementById("pop3_ssl").checked =
+        provider.pop3_config.use_ssl;
+    }
+
+    // 显示配置说明
+    if (provider.notes) {
+      document.getElementById("providerNotes").style.display = "block";
+      document.getElementById("notesContent").innerHTML = provider.notes;
+
+      // 根据服务商类型提供特定提示
+      updatePasswordHint(provider.provider_id);
+    }
+  }
+
+  // 更新密码提示
+  function updatePasswordHint(providerId) {
+    const hintElement = document.getElementById("passwordHint");
+
+    switch (providerId) {
+      case "qq":
+        hintElement.innerHTML = "请使用16位QQ邮箱授权码（非QQ密码）";
+        hintElement.className = "form-text text-warning";
+        break;
+      case "gmail":
+        hintElement.innerHTML = "请使用16位应用专用密码（非Gmail密码）";
+        hintElement.className = "form-text text-warning";
+        break;
+      case "163":
+      case "126":
+        hintElement.innerHTML = "请使用客户端授权密码（非网页登录密码）";
+        hintElement.className = "form-text text-warning";
+        break;
+      default:
+        hintElement.innerHTML = "请输入邮箱密码或授权码";
+        hintElement.className = "form-text text-muted";
+    }
+  }
+
+  // 加载服务商选项
+  async function loadProviderOptions() {
+    try {
+      const response = await fetch("/api/providers");
+      const data = await response.json();
+
+      if (data.success) {
+        const providerSelect = document.getElementById("provider");
+        providerSelect.innerHTML = "";
+
+        data.providers.forEach((provider) => {
+          const option = document.createElement("option");
+          option.value = provider.id;
+          option.textContent = provider.name;
+          providerSelect.appendChild(option);
+        });
+
+        // 监听服务商切换
+        providerSelect.addEventListener("change", function () {
+          const selectedProvider = data.providers.find(
+            (p) => p.id === this.value
+          );
+          if (selectedProvider && selectedProvider.smtp_config) {
+            fillConfiguration(selectedProvider);
+          }
+        });
+      }
+    } catch (error) {
+      console.error("加载服务商列表失败:", error);
+    }
+  }
+
+  // 表单提交处理
+  document
+    .getElementById("addAccountForm")
+    .addEventListener("submit", function (e) {
+      const submitBtn = document.getElementById("submitBtn");
+      submitBtn.innerHTML =
+        '<i class="fas fa-spinner fa-spin"></i> 正在保存...';
+      submitBtn.disabled = true;
+    });
+
+  // 页面加载时自动检测
+  document.addEventListener("DOMContentLoaded", function () {
+    // 如果URL中有邮箱参数，自动填充并检测
+    const urlParams = new URLSearchParams(window.location.search);
+    const emailParam = urlParams.get("email");
+    if (emailParam) {
+      document.getElementById("email").value = emailParam;
+      autoDetectProvider(emailParam);
+    }
+  });
+</script>
+{% endblock %}

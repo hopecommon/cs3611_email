@@ -86,7 +86,6 @@ class EmailUser(UserMixin):
         self.config = config
         self.provider_name = config.get("provider_name", "未知邮箱")
         self.last_login = datetime.now()
-        self.needs_reauth = config.get("needs_reauth", False)  # 是否需要重新认证
 
         # 兼容性：为了与WebUser保持接口一致
         self.username = email  # 用邮箱作为用户名
@@ -128,17 +127,75 @@ class EmailUser(UserMixin):
         """用户是否匿名"""
         return False
 
+    @property
+    def needs_reauth(self) -> bool:
+        """检查是否需要重新认证"""
+        return self.config.get("needs_reauth", False)
+
     def has_mail_config(self) -> bool:
         """检查是否有邮箱配置 - 对于EmailUser总是返回True"""
         return True
 
     def get_smtp_config(self):
-        """获取SMTP配置"""
-        return self.config.get("smtp", {})
+        """获取SMTP配置 - 简化版本"""
+        return self.config.get("smtp", {}).copy()
 
     def get_pop3_config(self):
-        """获取POP3配置"""
-        return self.config.get("pop3", {})
+        """获取POP3配置 - 简化版本"""
+        return self.config.get("pop3", {}).copy()
+
+    def update_pop3_password(self, new_password: str) -> bool:
+        """
+        更新POP3密码 - 简化版本
+
+        Args:
+            new_password: 新密码/授权码
+
+        Returns:
+            bool: 更新成功返回True，失败返回False
+        """
+        try:
+            # 1. 验证新密码是否有效
+            pop3_config = self.config.get("pop3", {})
+            if not self._test_pop3_connection_with_password(new_password, pop3_config):
+                print(f"❌ POP3密码验证失败: {self.email}")
+                return False
+
+            # 2. 更新配置中的密码
+            self.config["pop3"]["password"] = new_password
+            self.config["smtp"]["password"] = new_password  # 通常SMTP和POP3使用相同密码
+
+            # 3. 清除需要重新认证的标记
+            if "needs_reauth" in self.config:
+                del self.config["needs_reauth"]
+
+            print(f"✅ POP3密码更新成功: {self.email}")
+            return True
+
+        except Exception as e:
+            print(f"❌ 更新POP3密码失败: {e}")
+            return False
+
+    def _test_pop3_connection_with_password(
+        self, password: str, pop3_config: Dict
+    ) -> bool:
+        """使用指定密码测试POP3连接"""
+        try:
+            import poplib
+
+            if pop3_config.get("use_ssl"):
+                server = poplib.POP3_SSL(pop3_config["host"], pop3_config["port"])
+            else:
+                server = poplib.POP3(pop3_config["host"], pop3_config["port"])
+
+            server.user(self.email)
+            server.pass_(password)
+            server.quit()
+            print(f"✅ POP3密码验证成功: {self.email}")
+            return True
+        except Exception as e:
+            print(f"❌ POP3密码验证失败: {e}")
+            return False
 
 
 class EmailAuthenticator:
@@ -183,7 +240,7 @@ class EmailAuthenticator:
 
     def authenticate(self, email: str, password: str) -> Optional[EmailUser]:
         """
-        认证邮箱用户
+        认证邮箱用户 - 简化版本，参考CLI实现
 
         Args:
             email: 邮箱地址
@@ -199,32 +256,32 @@ class EmailAuthenticator:
                 print(f"❌ 不支持的邮箱服务商: {email}")
                 return None
 
-            # 2. 测试SMTP连接
+            # 2. 简化认证：只测试SMTP连接（参考CLI实现）
             smtp_config = provider_config["smtp"]
             if not self._test_smtp_connection(email, password, smtp_config):
                 print(f"❌ SMTP认证失败: {email}")
                 return None
 
-            # 3. 测试POP3连接（可选，某些服务商可能不支持）
-            pop3_config = provider_config["pop3"]
-            pop3_ok = self._test_pop3_connection(email, password, pop3_config)
-            if not pop3_ok:
-                print(f"⚠️  POP3连接失败，但SMTP成功: {email}")
+            print(f"✅ SMTP认证成功: {email}")
 
-            # 4. 保存邮箱配置
-            self._save_email_account(email, password, provider_config)
-
-            # 5. 创建用户对象
+            # 3. 创建用户对象（直接使用密码，不保存到数据库）
             user_config = {
                 "provider_name": provider_config["name"],
                 "smtp": {**smtp_config, "username": email, "password": password},
-                "pop3": {**pop3_config, "username": email, "password": password},
+                "pop3": {
+                    **provider_config["pop3"],
+                    "username": email,
+                    "password": password,
+                },
             }
 
             return EmailUser(email, user_config)
 
         except Exception as e:
             print(f"❌ 认证过程出错: {e}")
+            import traceback
+
+            traceback.print_exc()
             return None
 
     def _test_smtp_connection(
@@ -403,35 +460,9 @@ class EmailAuthenticator:
 
 # 用于Flask-Login的用户加载器
 def load_user_by_email(email: str) -> Optional[EmailUser]:
-    """通过邮箱加载用户（仅用于会话恢复，不包含密码）"""
-    try:
-        authenticator = EmailAuthenticator()
-        account_info = authenticator.get_saved_account(email)
-
-        if account_info:
-            # 构建用户配置（不包含密码）
-            user_config = {
-                "provider_name": account_info["provider_name"],
-                "smtp": {
-                    **account_info["smtp_config"],
-                    "username": email,
-                    # 密码需要重新输入
-                },
-                "pop3": {
-                    **account_info["pop3_config"],
-                    "username": email,
-                    # 密码需要重新输入
-                },
-                "needs_reauth": True,  # 标记需要重新认证
-            }
-
-            return EmailUser(email, user_config)
-
-        return None
-
-    except Exception as e:
-        print(f"❌ 加载邮箱用户失败: {e}")
-        return None
+    """通过邮箱加载用户 - 简化版本，需要重新登录"""
+    # 简化：不支持会话恢复，用户需要重新登录
+    return None
 
 
 # 创建全局认证器实例
