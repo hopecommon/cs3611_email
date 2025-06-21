@@ -17,6 +17,7 @@ from aiosmtpd.controller import Controller
 from aiosmtpd.smtp import SMTP as SMTPServer, LoginPassword
 from aiosmtpd.smtp import AuthResult
 import threading
+from bs4 import BeautifulSoup
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -106,34 +107,27 @@ class StableSMTPHandler:
                 logger.info(f"SMTP服务器自动添加Message-ID: {new_message_id}")
 
             # 重新格式化邮件内容，确保包含正确的头部信息
-            formatted_content = EmailFormatHandler.format_email_for_storage(email_obj)
-
-            # 执行垃圾邮件过滤
-            spam_result = self.db_handler.spam_filter.analyze_email(
-                {
-                    "from_addr": email_obj.from_addr.address,  # 使用修复后的from_addr
-                    "subject": email_obj.subject,
-                    "content": formatted_content,
-                }
+            formatted_content_for_storage = EmailFormatHandler.format_email_for_storage(
+                email_obj
             )
 
-            # 记录分析结果
-            logger.info(f"垃圾邮件分析结果: {spam_result}")
-            logger.debug(
-                f"垃圾邮件分析结果: is_spam={spam_result['is_spam']}, score={spam_result['score']}"
-            )
-            logger.debug(f"匹配的关键词: {spam_result['matched_keywords']}")
+            # 提取纯文本内容用于后续处理
+            plain_text_content = email_obj.text_content or ""
+            if not plain_text_content and email_obj.html_content:
+                # 如果没有纯文本，从HTML中提取
+                soup = BeautifulSoup(email_obj.html_content, "html.parser")
+                plain_text_content = soup.get_text()
 
             # 使用新的EmailService统一接口保存邮件
+            # 注意：垃圾邮件检测的职责已完全移交到save_email方法内部
             success = self.db_handler.save_email(
                 message_id=email_obj.message_id,
                 from_addr=email_obj.from_addr.address,  # 使用修复后的from_addr
                 to_addrs=rcpt_tos,
                 subject=email_obj.subject,
-                content=formatted_content,  # 使用格式化后的内容
+                content=plain_text_content,  # 传递纯文本内容用于分析
+                full_content_for_storage=formatted_content_for_storage,  # 传递完整格式化内容用于存储
                 date=email_obj.date or datetime.datetime.now(),
-                is_spam=spam_result["is_spam"],
-                spam_score=spam_result["score"],
             )
 
             if not success:

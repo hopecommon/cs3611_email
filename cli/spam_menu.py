@@ -66,11 +66,13 @@ class SpamManagementMenu:
             print("2. ➕ 添加关键词")
             print("3. ❌ 删除关键词")
             print("4. 📈 调整过滤阈值")
-            print("5. 🧪 测试过滤器")
+            print("5. ⚙️ 高级配置")
+            print("6. 📊 过滤器统计")
+            print("7. 🧪 测试过滤器")
             print("0. 🔙 返回主菜单")
             print("-" * 60)
 
-            choice = input("\n请选择操作 [0-5]: ").strip()
+            choice = input("\n请选择操作 [0-7]: ").strip()
 
             if choice == "1":
                 self._show_current_keywords()
@@ -81,6 +83,10 @@ class SpamManagementMenu:
             elif choice == "4":
                 self._adjust_threshold()
             elif choice == "5":
+                self._advanced_config()
+            elif choice == "6":
+                self._show_filter_stats()
+            elif choice == "7":
                 self._test_filter()
             elif choice == "0":
                 return
@@ -233,5 +239,100 @@ class SpamManagementMenu:
                 print(f"  • {keyword}")
         else:
             print("匹配关键词: 无")
+
+        input("\n按回车键继续...")
+
+    def _advanced_config(self):
+        """高级配置"""
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("⚙️ 高级配置")
+        print("=" * 60)
+
+        print("当前配置:")
+        stats = self.spam_filter.get_filter_stats()
+        print(f"基础阈值: {stats['threshold']}")
+        print(f"最小阈值: {stats['min_threshold']}")
+        print(f"最大阈值: {stats['max_threshold']}")
+        print(f"动态阈值: {'启用' if stats['dynamic_threshold'] else '禁用'}")
+
+        print("\n配置选项:")
+        print("1. 设置基础阈值")
+        print("2. 设置最小阈值")
+        print("3. 设置最大阈值")
+        print("4. 切换动态阈值")
+        print("0. 返回")
+
+        choice = input("\n请选择 [0-4]: ").strip()
+
+        if choice == "1":
+            try:
+                threshold = float(input("请输入新的基础阈值 (0.0-10.0): "))
+                if self.spam_filter.configure_thresholds(base_threshold=threshold):
+                    print("✅ 基础阈值设置成功")
+                else:
+                    print("❌ 设置失败")
+            except ValueError:
+                print("❌ 请输入有效的数字")
+
+        elif choice == "2":
+            try:
+                threshold = float(input("请输入新的最小阈值 (0.0-10.0): "))
+                if self.spam_filter.configure_thresholds(min_threshold=threshold):
+                    print("✅ 最小阈值设置成功")
+                else:
+                    print("❌ 设置失败")
+            except ValueError:
+                print("❌ 请输入有效的数字")
+
+        elif choice == "3":
+            try:
+                threshold = float(input("请输入新的最大阈值 (0.0-10.0): "))
+                if self.spam_filter.configure_thresholds(max_threshold=threshold):
+                    print("✅ 最大阈值设置成功")
+                else:
+                    print("❌ 设置失败")
+            except ValueError:
+                print("❌ 请输入有效的数字")
+
+        elif choice == "4":
+            current = self.spam_filter.dynamic_threshold
+            new_status = not current
+            if self.spam_filter.configure_thresholds(enable_dynamic=new_status):
+                status_text = "启用" if new_status else "禁用"
+                print(f"✅ 动态阈值已{status_text}")
+            else:
+                print("❌ 设置失败")
+
+        input("\n按回车键继续...")
+
+    def _show_filter_stats(self):
+        """显示过滤器统计信息"""
+        self.main_cli.clear_screen()
+        print("\n" + "=" * 60)
+        print("📊 过滤器统计信息")
+        print("=" * 60)
+
+        stats = self.spam_filter.get_filter_stats()
+
+        print("📋 阈值配置:")
+        print(f"  基础阈值: {stats['threshold']}")
+        print(f"  最小阈值: {stats['min_threshold']}")
+        print(f"  最大阈值: {stats['max_threshold']}")
+        print(f"  动态阈值: {'启用' if stats['dynamic_threshold'] else '禁用'}")
+
+        print("\n🔤 关键词统计:")
+        keyword_counts = stats["keyword_counts"]
+        print(f"  主题关键词: {keyword_counts['subject']} 个")
+        print(f"  正文关键词: {keyword_counts['body']} 个")
+        print(f"  发件人关键词: {keyword_counts['sender']} 个")
+        print(f"  总计: {sum(keyword_counts.values())} 个")
+
+        if stats["dynamic_threshold"]:
+            print("\n⚙️ 动态阈值规则:")
+            print("  • 多重匹配时：阈值降低 0.5")
+            print("  • 仅主题匹配时：阈值提高 0.3")
+            print("  • 内容过短时：额外 0.5 分")
+            print("  • 多重匹配奖励：额外 0.5 × (匹配数-1) 分")
 
         input("\n按回车键继续...")

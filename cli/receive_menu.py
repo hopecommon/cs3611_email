@@ -241,13 +241,33 @@ class ReceiveEmailMenu:
                                             else:
                                                 to_addrs.append(current_user_email)
 
+                                    # 提取纯文本内容用于垃圾过滤分析
+                                    plain_text_content = email.text_content or ""
+                                    if not plain_text_content and email.html_content:
+                                        # 如果没有纯文本，从HTML中提取
+                                        try:
+                                            from bs4 import BeautifulSoup
+
+                                            soup = BeautifulSoup(
+                                                email.html_content, "html.parser"
+                                            )
+                                            plain_text_content = soup.get_text()
+                                        except ImportError:
+                                            # 如果没有BeautifulSoup，使用简单的HTML标签移除
+                                            import re
+
+                                            plain_text_content = re.sub(
+                                                r"<[^>]+>", "", email.html_content or ""
+                                            )
+
                                     success = db.save_email(
                                         message_id=email.message_id,
                                         from_addr=from_addr,
                                         to_addrs=to_addrs,
                                         subject=email.subject or "",
+                                        content=plain_text_content,  # 传递纯文本内容用于垃圾过滤
+                                        full_content_for_storage=eml_content,  # 传递完整EML内容用于存储
                                         date=email.date,
-                                        content=eml_content,
                                     )
 
                                     if success:
@@ -270,6 +290,10 @@ class ReceiveEmailMenu:
         except Exception as e:
             logger.error(f"接收邮件时出错: {e}")
             print(f"❌ 接收邮件时出错: {e}")
+
+        # 自动进行垃圾邮件重新扫描
+        if db_saved_count > 0:
+            self._auto_spam_rescan(db_saved_count)
 
         input("\n按回车键继续...")
 
@@ -378,13 +402,33 @@ class ReceiveEmailMenu:
                                             else:
                                                 to_addrs.append(current_user_email)
 
+                                    # 提取纯文本内容用于垃圾过滤分析
+                                    plain_text_content = email.text_content or ""
+                                    if not plain_text_content and email.html_content:
+                                        # 如果没有纯文本，从HTML中提取
+                                        try:
+                                            from bs4 import BeautifulSoup
+
+                                            soup = BeautifulSoup(
+                                                email.html_content, "html.parser"
+                                            )
+                                            plain_text_content = soup.get_text()
+                                        except ImportError:
+                                            # 如果没有BeautifulSoup，使用简单的HTML标签移除
+                                            import re
+
+                                            plain_text_content = re.sub(
+                                                r"<[^>]+>", "", email.html_content or ""
+                                            )
+
                                     success = db.save_email(
                                         message_id=email.message_id,
                                         from_addr=from_addr,
                                         to_addrs=to_addrs,
                                         subject=email.subject or "",
+                                        content=plain_text_content,  # 传递纯文本内容用于垃圾过滤
+                                        full_content_for_storage=eml_content,  # 传递完整EML内容用于存储
                                         date=email.date,
-                                        content=eml_content,
                                     )
 
                                     if success:
@@ -401,6 +445,10 @@ class ReceiveEmailMenu:
                     print(f"\n🎉 接收完成!")
                     print(f"✅ 成功保存了 {saved_count} 封邮件到: {inbox_dir}")
                     print(f"✅ 成功保存了 {db_saved_count} 封邮件到数据库")
+
+                    # 自动进行垃圾邮件重新扫描
+                    if db_saved_count > 0:
+                        self._auto_spam_rescan(db_saved_count)
                 else:
                     print("❌ 未获取到任何邮件")
 
@@ -528,3 +576,109 @@ class ReceiveEmailMenu:
             print(f"❌ 导入邮件时出错: {e}")
 
         input("\n按回车键继续...")
+
+    def _auto_spam_rescan(self, new_emails_count: int):
+        """
+        自动进行垃圾邮件重新扫描
+
+        Args:
+            new_emails_count: 新接收的邮件数量
+        """
+        try:
+            print(f"\n🔍 正在进行垃圾邮件自动扫描...")
+
+            # 获取数据库服务
+            db = self.main_cli.get_db()
+
+            # 获取垃圾过滤器
+            from spam_filter.spam_filter import KeywordSpamFilter
+
+            spam_filter = KeywordSpamFilter()
+
+            # 获取最近的邮件进行扫描（包括刚接收的邮件）
+            recent_emails = db.list_emails(
+                limit=new_emails_count * 2, include_spam=True
+            )
+
+            if not recent_emails:
+                print("   📭 没有邮件需要扫描")
+                return
+
+            print(f"   📊 正在扫描 {len(recent_emails)} 封邮件...")
+
+            updated_count = 0
+            spam_found = 0
+            normal_found = 0
+
+            for email in recent_emails:
+                try:
+                    message_id = email.get("message_id", "")
+                    subject = email.get("subject", "")
+                    from_addr = email.get("from_addr", "")
+                    current_is_spam = email.get("is_spam", False)
+                    current_spam_score = email.get("spam_score", 0.0)
+
+                    # 获取邮件内容用于分析
+                    email_with_content = db.get_email(message_id, include_content=True)
+                    content = ""
+                    if email_with_content:
+                        content = email_with_content.get("content", "")
+
+                    # 使用垃圾过滤器重新分析
+                    analysis_data = {
+                        "from_addr": from_addr,
+                        "subject": subject,
+                        "content": content,
+                    }
+
+                    result = spam_filter.analyze_email(analysis_data)
+                    new_is_spam = result["is_spam"]
+                    new_spam_score = result["score"]
+
+                    # 检查是否需要更新
+                    if (
+                        new_is_spam != current_is_spam
+                        or abs(new_spam_score - current_spam_score) > 0.1
+                    ):
+                        # 更新数据库
+                        success = db.update_email(
+                            message_id, is_spam=new_is_spam, spam_score=new_spam_score
+                        )
+
+                        if success:
+                            updated_count += 1
+                            status_old = "垃圾" if current_is_spam else "正常"
+                            status_new = "垃圾" if new_is_spam else "正常"
+                            print(
+                                f"   📧 更新: {subject[:30]}... [{status_old}→{status_new}]"
+                            )
+
+                    # 统计
+                    if new_is_spam:
+                        spam_found += 1
+                    else:
+                        normal_found += 1
+
+                except Exception as e:
+                    logger.error(f"扫描邮件时出错: {e}")
+                    continue
+
+            # 显示扫描结果
+            print(f"\n📊 垃圾邮件扫描完成:")
+            print(f"   📧 扫描邮件数: {len(recent_emails)}")
+            print(f"   🔄 更新邮件数: {updated_count}")
+            print(f"   🚫 垃圾邮件数: {spam_found}")
+            print(f"   ✅ 正常邮件数: {normal_found}")
+
+            if spam_found > 0:
+                print(f"   ⚠️  发现 {spam_found} 封垃圾邮件，已自动标记")
+
+            if updated_count > 0:
+                print(f"   ✅ 成功更新了 {updated_count} 封邮件的垃圾状态")
+            else:
+                print(f"   ✅ 所有邮件的垃圾状态都是正确的")
+
+        except Exception as e:
+            logger.error(f"自动垃圾邮件扫描失败: {e}")
+            print(f"   ❌ 垃圾邮件扫描失败: {e}")
+            print(f"   💡 您可以稍后在垃圾邮件管理中手动重新扫描")

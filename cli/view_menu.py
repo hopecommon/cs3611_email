@@ -103,18 +103,46 @@ class ViewEmailMenu:
 
             if self.main_cli.get_current_folder() == "sent":
                 # 查询已发送邮件：按发件人过滤
-                emails = db.list_sent_emails(
-                    from_addr=current_user_email,  # 修复：按发件人过滤
-                    include_spam=(filter_choice != "2"),
-                    is_spam=((filter_choice == "3") if filter_choice == "3" else None),
-                )
+                # 修复垃圾邮件过滤逻辑
+                if filter_choice == "2":  # 仅显示正常邮件
+                    emails = db.list_sent_emails(
+                        from_addr=current_user_email,
+                        include_spam=False,
+                        is_spam=False,
+                    )
+                elif filter_choice == "3":  # 仅显示垃圾邮件
+                    emails = db.list_sent_emails(
+                        from_addr=current_user_email,
+                        include_spam=True,
+                        is_spam=True,
+                    )
+                else:  # 显示所有邮件
+                    emails = db.list_sent_emails(
+                        from_addr=current_user_email,
+                        include_spam=True,
+                        is_spam=None,
+                    )
             else:
                 # 查询收到的邮件：按收件人过滤
-                emails = db.list_emails(
-                    user_email=current_user_email,  # 关键修复：按收件人过滤
-                    include_spam=(filter_choice != "2"),
-                    is_spam=(filter_choice == "3"),
-                )
+                # 修复垃圾邮件过滤逻辑
+                if filter_choice == "2":  # 仅显示正常邮件
+                    emails = db.list_emails(
+                        user_email=current_user_email,
+                        include_spam=False,
+                        is_spam=False,
+                    )
+                elif filter_choice == "3":  # 仅显示垃圾邮件
+                    emails = db.list_emails(
+                        user_email=current_user_email,
+                        include_spam=True,
+                        is_spam=True,
+                    )
+                else:  # 显示所有邮件
+                    emails = db.list_emails(
+                        user_email=current_user_email,
+                        include_spam=True,
+                        is_spam=None,
+                    )
 
             if not emails:
                 print(f"📭 {folder}中没有邮件")
@@ -140,6 +168,10 @@ class ViewEmailMenu:
                 else:
                     status = "✅已读" if email.get("is_read") else "📬未读"
 
+                # 添加垃圾邮件标记
+                if email.get("is_spam", False):
+                    status += " 🚫垃圾"
+
                 date = email.get("date", "")
                 sender = email.get("from_addr", email.get("sender", ""))
                 subject = email.get("subject", "")
@@ -154,11 +186,15 @@ class ViewEmailMenu:
                 if email.get("is_recalled"):
                     subject = f"[已撤回] {subject}"
 
+                # 如果是垃圾邮件，在主题前加标记
+                if email.get("is_spam", False):
+                    subject = f"[垃圾] {subject}"
+
                 # 截断过长的字段以适应显示
                 sender = sender[:28] + ".." if len(sender) > 30 else sender
                 subject = subject[:38] + ".." if len(subject) > 40 else subject
 
-                print(f"{i+1:<5} {status:<8} {date:<20} {sender:<30} {subject:<40}")
+                print(f"{i+1:<5} {status:<12} {date:<20} {sender:<30} {subject:<40}")
 
             # 选择邮件
             print("-" * 100)

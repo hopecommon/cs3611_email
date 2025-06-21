@@ -139,8 +139,11 @@ class EmailService:
         from_addr: str,
         to_addrs: Union[List[str], str],
         subject: str = "",
-        content: str = "",
+        content: str = "",  # 这是纯文本内容，用于分析
         date: Optional[datetime.datetime] = None,
+        full_content_for_storage: Optional[
+            str
+        ] = None,  # 这是完整的.eml格式内容，用于存储
         **kwargs,
     ) -> bool:
         """
@@ -153,12 +156,17 @@ class EmailService:
             subject: 邮件主题
             content: 邮件内容
             date: 邮件日期
+            full_content_for_storage: 完整的.eml格式内容，用于存储
             **kwargs: 其他选项（is_spam, spam_score等）
 
         Returns:
             bool: 操作是否成功
         """
         try:
+            # 如果没有提供完整的存储内容，则使用纯文本内容
+            if full_content_for_storage is None:
+                full_content_for_storage = content
+
             # 准备邮件数据进行验证
             email_data = {
                 "message_id": message_id,
@@ -168,7 +176,7 @@ class EmailService:
                 "date": (
                     date.isoformat() if date else datetime.datetime.now().isoformat()
                 ),
-                "content": content,
+                "content": full_content_for_storage,  # 验证完整内容
             }
 
             # 验证邮件数据
@@ -195,19 +203,14 @@ class EmailService:
             if isinstance(to_addrs, str):
                 to_addrs = [to_addrs]
 
-            # 在保存前进行垃圾邮件检测
+            # 在保存前进行垃圾邮件检测，使用纯文本content进行分析
             spam_result = self.spam_filter.analyze_email(
                 {"from_addr": from_addr, "subject": subject, "content": content}
             )
 
-            # 更新保存参数
-            kwargs.update(
-                {"is_spam": spam_result["is_spam"], "spam_score": spam_result["score"]}
-            )
-
             # 保存邮件内容（如果提供）
             content_path = None
-            if content:
+            if full_content_for_storage:
                 # 传递元数据给内容管理器，确保正确的头部格式
                 metadata = {
                     "message_id": message_id,
@@ -217,19 +220,19 @@ class EmailService:
                     "date": date.isoformat(),
                 }
                 content_path = self.content_manager.save_content(
-                    message_id, content, metadata
+                    message_id, full_content_for_storage, metadata
                 )
 
-            # 创建邮件记录
+            # 创建邮件记录，直接使用spam_result的结果
             email_record = EmailRecord(
                 message_id=message_id,
                 from_addr=from_addr,
                 to_addrs=to_addrs,
                 subject=subject,
                 date=date,
-                size=len(content) if content else 0,
-                is_spam=kwargs.get("is_spam", False),
-                spam_score=kwargs.get("spam_score", 0.0),
+                size=len(full_content_for_storage) if full_content_for_storage else 0,
+                is_spam=spam_result["is_spam"],
+                spam_score=spam_result["score"],
                 content_path=content_path,
             )
 
