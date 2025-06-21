@@ -123,8 +123,9 @@ class AccountManager:
             encrypted_bytes = base64.urlsafe_b64decode(encrypted_password.encode())
             decrypted = self.cipher.decrypt(encrypted_bytes)
             return decrypted.decode()
-        except Exception as e:
-            logger.error(f"密码解密失败: {e}")
+        except Exception:
+            # 当密码已经是明文时，解密会失败。这是一种预期的兼容行为。
+            logger.debug(f"无法解密密码，假定其为明文。")
             return encrypted_password  # 返回原密码
 
     def _load_accounts(self) -> Dict[str, Any]:

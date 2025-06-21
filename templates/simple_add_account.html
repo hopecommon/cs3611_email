@@ -251,7 +251,7 @@
                 id="submitBtn"
                 style="display: none"
               >
-                <i class="fas fa-save"></i> 保存账户
+                <i class="fas fa-sign-in-alt"></i> 完成并登录
               </button>
             </div>
           </div>
@@ -401,8 +401,9 @@
       if (detectedProvider && detectedProvider.detected) {
         // 自动识别成功，直接跳到认证步骤
         loadProviderConfig();
-        currentStep = 2; // 跳到第3步（认证）
+        currentStep = 3; // 修复：直接跳到第3步（认证），并正确更新状态
         document.getElementById("step1").style.display = "none";
+        document.getElementById("step2").style.display = "none"; // 确保第二步也被隐藏
         document.getElementById("step3").style.display = "block";
         updateButtons();
         return;
@@ -423,7 +424,7 @@
 
   // 上一步
   function prevStep() {
-    // 如果当前在认证步骤，且有自动识别结果，直接返回到邮箱输入步骤
+    // 如果当前在认证步骤，且之前是自动识别跳过来的，直接返回到邮箱输入步骤
     if (currentStep === 3 && detectedProvider && detectedProvider.detected) {
       document.getElementById("step3").style.display = "none";
       currentStep = 1;
@@ -576,7 +577,7 @@
     .addEventListener("submit", function (e) {
       const submitBtn = document.getElementById("submitBtn");
       submitBtn.innerHTML =
-        '<i class="fas fa-spinner fa-spin"></i> 正在保存...';
+        '<i class="fas fa-spinner fa-spin"></i> 正在验证并登录...';
       submitBtn.disabled = true;
     });
 
