@@ -141,3 +141,4 @@ python tests/performance/test_enhanced_concurrency.py
 ## 6. 许可证
 
 本项目基于 MIT 许可证开源。
+github链接: https://github.com/hopecommon/cs3611_email
