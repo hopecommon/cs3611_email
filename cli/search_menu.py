@@ -245,12 +245,16 @@ class SearchEmailMenu:
         all_emails = []
 
         # 获取收件箱邮件
-        received_emails = db.list_emails(user_email=user_email, limit=search_limit // 2)
+        received_emails = db.list_emails(
+            user_email=user_email, include_recalled=False, limit=search_limit // 2
+        )
         if received_emails:
             all_emails.extend(received_emails)
 
         # 获取已发送邮件
-        sent_emails = db.list_sent_emails(from_addr=user_email, limit=search_limit // 2)
+        sent_emails = db.list_sent_emails(
+            from_addr=user_email, include_recalled=False, limit=search_limit // 2
+        )
         if sent_emails:
             for email in sent_emails:
                 email["type"] = "sent"
@@ -671,12 +675,16 @@ class SearchEmailMenu:
         all_emails = []
 
         if include_received:
-            received_emails = db.list_emails(user_email=user_email, limit=1000)
+            received_emails = db.list_emails(
+                user_email=user_email, include_recalled=False, limit=1000
+            )
             if received_emails:
                 all_emails.extend(received_emails)
 
         if include_sent:
-            sent_emails = db.list_sent_emails(from_addr=user_email, limit=1000)
+            sent_emails = db.list_sent_emails(
+                from_addr=user_email, include_recalled=False, limit=1000
+            )
             if sent_emails:
                 for email in sent_emails:
                     email["type"] = "sent"

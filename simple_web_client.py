@@ -568,6 +568,7 @@ def receive_emails_page():
                 user_email=session["email"],
                 include_deleted=True,
                 include_spam=True,
+                include_recalled=True,  # 包含已撤回邮件以便过滤
                 limit=2000,  # 获取足够多的已删除邮件记录
             )
             # 创建已删除邮件ID集合，只包含is_deleted=True的邮件

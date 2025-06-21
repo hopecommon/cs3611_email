@@ -203,6 +203,47 @@ class EmailService:
             if isinstance(to_addrs, str):
                 to_addrs = [to_addrs]
 
+            # 🔙 检查邮件是否已被撤回
+            # 在保存到收件箱之前，检查该邮件是否在已发送邮件中被标记为撤回
+            # 由于邮件服务器可能重新生成Message ID，我们需要多种方式匹配
+            try:
+                # 方法1：直接通过Message ID匹配
+                sent_email = self.email_repo.get_sent_email_by_id(message_id)
+                if sent_email and sent_email.is_recalled:
+                    logger.info(
+                        f"邮件已被撤回(Message ID匹配)，跳过保存到收件箱: {message_id}"
+                    )
+                    return True  # 返回成功，但实际上不保存撤回的邮件
+
+                # 方法2：通过主题+发件人+时间范围匹配（用于Message ID不一致的情况）
+                # 查找最近发送的同主题同发件人的已撤回邮件
+                try:
+                    # 查找24小时内的已撤回邮件
+                    time_limit = datetime.datetime.now() - datetime.timedelta(hours=24)
+
+                    # 查询已撤回的已发送邮件
+                    recent_recalled_emails = self.email_repo.list_sent_emails(
+                        from_addr=from_addr, include_recalled=True, limit=50
+                    )
+
+                    for recalled_email in recent_recalled_emails:
+                        if (
+                            recalled_email.is_recalled
+                            and recalled_email.subject == subject
+                            and recalled_email.from_addr == from_addr
+                            and recalled_email.date >= time_limit
+                        ):
+                            logger.info(
+                                f"邮件已被撤回(主题+发件人匹配)，跳过保存到收件箱: 主题={subject}, 发件人={from_addr}"
+                            )
+                            return True  # 返回成功，但实际上不保存撤回的邮件
+
+                except Exception as match_error:
+                    logger.warning(f"主题匹配检查失败: {match_error}")
+
+            except Exception as e:
+                logger.warning(f"检查邮件撤回状态失败，继续保存: {e}")
+
             # 在保存前进行垃圾邮件检测，使用纯文本content进行分析
             spam_result = self.spam_filter.analyze_email(
                 {"from_addr": from_addr, "subject": subject, "content": content}
@@ -697,6 +738,7 @@ class EmailService:
         from_addr: Optional[str] = None,
         include_spam: bool = True,
         is_spam: Optional[bool] = None,
+        include_recalled: bool = False,
         limit: int = 100,
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
@@ -707,6 +749,7 @@ class EmailService:
             from_addr: 发件人地址过滤
             include_spam: 是否包含垃圾邮件
             is_spam: 垃圾邮件过滤（None=全部，True=仅垃圾邮件，False=仅正常邮件）
+            include_recalled: 是否包含已撤回邮件
             limit: 返回数量限制
             offset: 偏移量
 
@@ -718,6 +761,7 @@ class EmailService:
                 from_addr=from_addr,
                 include_spam=include_spam,
                 is_spam=is_spam,
+                include_recalled=include_recalled,
                 limit=limit,
                 offset=offset,
             )

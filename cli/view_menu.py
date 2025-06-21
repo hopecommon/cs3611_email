@@ -109,18 +109,21 @@ class ViewEmailMenu:
                         from_addr=current_user_email,
                         include_spam=False,
                         is_spam=False,
+                        include_recalled=False,
                     )
                 elif filter_choice == "3":  # 仅显示垃圾邮件
                     emails = db.list_sent_emails(
                         from_addr=current_user_email,
                         include_spam=True,
                         is_spam=True,
+                        include_recalled=False,
                     )
                 else:  # 显示所有邮件
                     emails = db.list_sent_emails(
                         from_addr=current_user_email,
                         include_spam=True,
                         is_spam=None,
+                        include_recalled=False,
                     )
             else:
                 # 查询收到的邮件：按收件人过滤
@@ -130,18 +133,21 @@ class ViewEmailMenu:
                         user_email=current_user_email,
                         include_spam=False,
                         is_spam=False,
+                        include_recalled=False,
                     )
                 elif filter_choice == "3":  # 仅显示垃圾邮件
                     emails = db.list_emails(
                         user_email=current_user_email,
                         include_spam=True,
                         is_spam=True,
+                        include_recalled=False,
                     )
                 else:  # 显示所有邮件
                     emails = db.list_emails(
                         user_email=current_user_email,
                         include_spam=True,
                         is_spam=None,
+                        include_recalled=False,
                     )
 
             if not emails:

@@ -346,6 +346,7 @@ class POP3CommandHandler:
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
+                    include_recalled=False,
                 )
                 logger.debug(
                     f"已为用户 {self.authenticated_user} 加载 {len(self.cached_emails)} 封邮件"
@@ -406,6 +407,7 @@ class POP3CommandHandler:
                         user_email=self.user_email,
                         include_deleted=False,
                         include_spam=False,
+                        include_recalled=False,
                     )
                     logger.debug(
                         f"已为用户 {self.authenticated_user} 加载 {len(self.cached_emails)} 封邮件"
@@ -616,6 +618,7 @@ Content-Type: text/plain; charset="utf-8"
                         user_email=self.user_email,
                         include_deleted=False,
                         include_spam=False,
+                        include_recalled=False,
                     )
                     logger.debug(
                         f"已为用户 {self.authenticated_user} 加载 {len(self.cached_emails)} 封邮件"
@@ -715,6 +718,7 @@ Content-Type: text/plain; charset="utf-8"
                 user_email=self.user_email,
                 include_deleted=False,
                 include_spam=False,
+                include_recalled=False,
             )
 
             if 1 <= msg_num <= len(emails):
@@ -801,6 +805,7 @@ Content-Type: text/plain; charset="utf-8"
                     user_email=self.user_email,
                     include_deleted=False,
                     include_spam=False,
+                    include_recalled=False,
                 )
                 logger.debug(
                     f"已为用户 {self.authenticated_user} 加载 {len(self.cached_emails)} 封邮件"

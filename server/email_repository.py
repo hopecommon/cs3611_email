@@ -189,12 +189,20 @@ class EmailRepository:
         """
         try:
             # 过滤有效的状态字段
-            valid_fields = {"is_read", "is_deleted", "is_spam", "spam_score"}
+            valid_fields = {
+                "is_read",
+                "is_deleted",
+                "is_spam",
+                "spam_score",
+                "is_recalled",
+                "recalled_at",
+                "recalled_by",
+            }
             data = {}
 
             for key, value in status_updates.items():
                 if key in valid_fields:
-                    if key in ["is_read", "is_deleted", "is_spam"]:
+                    if key in ["is_read", "is_deleted", "is_spam", "is_recalled"]:
                         data[key] = 1 if value else 0
                     else:
                         data[key] = value
@@ -307,6 +315,7 @@ class EmailRepository:
         from_addr: Optional[str] = None,
         include_spam: bool = True,
         is_spam: Optional[bool] = None,
+        include_recalled: bool = False,
         limit: int = 100,
         offset: int = 0,
     ) -> List[SentEmailRecord]:
@@ -317,6 +326,7 @@ class EmailRepository:
             from_addr: 发件人地址
             include_spam: 是否包含垃圾邮件
             is_spam: 垃圾邮件过滤（None=全部，True=仅垃圾邮件，False=仅正常邮件）
+            include_recalled: 是否包含已撤回邮件
             limit: 返回的最大数量
             offset: 偏移量
 
@@ -343,6 +353,10 @@ class EmailRepository:
                     query += " AND is_spam = 1"
                 else:
                     query += " AND (is_spam = 0 OR is_spam IS NULL)"
+
+            # 撤回状态过滤 - 默认隐藏已撤回邮件
+            if not include_recalled:
+                query += " AND (is_recalled = 0 OR is_recalled IS NULL)"
 
             # 排序和分页
             query += " ORDER BY date DESC LIMIT ? OFFSET ?"
@@ -520,12 +534,18 @@ class EmailRepository:
         """
         try:
             # 过滤有效的状态字段
-            valid_fields = {"is_read", "status"}
+            valid_fields = {
+                "is_read",
+                "status",
+                "is_recalled",
+                "recalled_at",
+                "recalled_by",
+            }
             data = {}
 
             for key, value in status_updates.items():
                 if key in valid_fields:
-                    if key == "is_read":
+                    if key in ["is_read", "is_recalled"]:
                         data[key] = 1 if value else 0
                     else:
                         data[key] = value
@@ -605,33 +625,73 @@ class EmailRepository:
             Dict包含can_recall(bool)和reason(str)
         """
         try:
-            # 检查是否为该用户发送的邮件
-            sent_email = self.get_sent_email_by_id(message_id)
-
-            if not sent_email:
-                return {"can_recall": False, "reason": "邮件不存在或不是您发送的邮件"}
-
-            # 检查发件人是否匹配
-            from_addr = sent_email.from_addr
-            if not self._is_user_email_match(from_addr, user_email):
-                return {"can_recall": False, "reason": "只能撤回自己发送的邮件"}
-
-            # 检查是否已经撤回
-            if sent_email.is_recalled:
-                return {"can_recall": False, "reason": "邮件已经撤回过了"}
-
-            # 检查邮件发送时间（可选：限制撤回时间窗口）
             import datetime
 
-            now = datetime.datetime.now()
-            email_date = sent_email.date
+            # 首先检查已发送邮件表
+            sent_email = self.get_sent_email_by_id(message_id)
 
-            # 设置撤回时间窗口为24小时
-            time_limit = datetime.timedelta(hours=24)
-            if now - email_date > time_limit:
-                return {"can_recall": False, "reason": "邮件发送超过24小时，无法撤回"}
+            if sent_email:
+                # 检查发件人是否匹配
+                from_addr = sent_email.from_addr
+                if not self._is_user_email_match(from_addr, user_email):
+                    return {"can_recall": False, "reason": "只能撤回自己发送的邮件"}
 
-            return {"can_recall": True, "reason": "可以撤回"}
+                # 检查是否已经撤回
+                if sent_email.is_recalled:
+                    return {"can_recall": False, "reason": "邮件已经撤回过了"}
+
+                # 检查邮件发送时间
+                now = datetime.datetime.now()
+                email_date = sent_email.date
+                time_limit = datetime.timedelta(hours=24)
+                if now - email_date > time_limit:
+                    return {
+                        "can_recall": False,
+                        "reason": "邮件发送超过24小时，无法撤回",
+                    }
+
+                return {"can_recall": True, "reason": "可以撤回"}
+
+            # 如果已发送邮件表中没有，检查收件箱中是否有自己发送给自己的邮件
+            try:
+                result = self.db.execute_query(
+                    "SELECT * FROM emails WHERE message_id = ?",
+                    (message_id,),
+                    fetch_one=True,
+                )
+
+                if result:
+                    from_addr = result.get("from_addr", "")
+
+                    # 检查是否是自己发送给自己的邮件
+                    if self._is_user_email_match(from_addr, user_email):
+                        # 检查是否已经撤回
+                        if result.get("is_recalled", 0) == 1:
+                            return {"can_recall": False, "reason": "邮件已经撤回过了"}
+
+                        # 检查邮件时间
+                        date_str = result.get("date", "")
+                        if date_str:
+                            try:
+                                email_date = datetime.datetime.fromisoformat(date_str)
+                                now = datetime.datetime.now()
+                                time_limit = datetime.timedelta(hours=24)
+                                if now - email_date > time_limit:
+                                    return {
+                                        "can_recall": False,
+                                        "reason": "邮件发送超过24小时，无法撤回",
+                                    }
+                            except:
+                                pass  # 如果日期解析失败，继续允许撤回
+
+                        return {"can_recall": True, "reason": "可以撤回"}
+                    else:
+                        return {"can_recall": False, "reason": "只能撤回自己发送的邮件"}
+
+            except Exception as e:
+                logger.error(f"查询收件箱邮件时出错: {e}")
+
+            return {"can_recall": False, "reason": "邮件不存在或不是您发送的邮件"}
 
         except Exception as e:
             logger.error(f"检查邮件撤回权限时出错: {e}")
