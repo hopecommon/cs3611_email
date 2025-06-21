@@ -1,232 +1,143 @@
-# 邮件系统项目
+# CS3611 邮件系统项目
 
-## 项目概述
+## 1. 项目概述
 
-这是一个完整的邮件系统实现，包含SMTP和POP3服务器以及相应的客户端。系统支持SSL/TLS加密、用户认证、高并发处理和完整的邮件存储功能。
+本项目是一个基于 SMTP/POP3 协议的完整邮件系统。根据课程设计要求，我们实现了邮件的发送、接收、加密、存储等核心功能，并完成了多项扩展任务，包括 **PGP端到端加密**、**垃圾邮件过滤**、**邮件撤回** 和 **Web邮件界面**。
 
-## 功能特性
+系统支持 SSL/TLS 安全传输，并通过高并发优化，确保了在多用户场景下的稳定运行。
 
-### ✅ 已完成功能
-- **SMTP服务器**: SSL/TLS支持，用户认证，邮件发送
-- **POP3服务器**: SSL/TLS支持，高并发优化，邮件接收
-- **客户端**: 邮件发送/接收，本地存储，用户认证
-- **数据库**: SQLite存储，WAL模式，元数据管理
-- **安全**: SSL证书，密码加密，用户权限管理
-- **参数优先级**: 命令行参数具有最高优先级，智能SSL推断
+## 2. 功能特性
 
-### 📊 性能指标
-- **并发支持**: 200+并发连接
-- **SSL连接**: 100%成功率
-- **响应时间**: <3秒 (高并发场景)
-- **资源使用**: CPU <6%, 内存合理
-- **参数处理**: 命令行参数正确覆盖配置文件设置
+本项目完整实现了课程要求的各项功能：
 
-## 快速开始
+| 功能类别     | 特性                                             | 完成情况 |
+| :----------- | :----------------------------------------------- | :------- |
+| **基础功能** | **SMTP/POP3 协议**：支持邮件发送与接收。         | ✅ 已完成 |
+|              | **MIME 协议**：支持 HTML 邮件及多种格式附件。    | ✅ 已完成 |
+|              | **用户认证**：支持明文及加密登录。               | ✅ 已完成 |
+|              | **本地存储**：邮件可保存为 `.eml` 文件。         | ✅ 已完成 |
+|              | **并发服务**：服务端支持多用户同时操作。         | ✅ 已完成 |
+| **安全机制** | **SSL/TLS 加密**：保障客户端与服务器的通信安全。 | ✅ 已完成 |
+| **扩展功能** | **PGP 端到端加密**：确保邮件内容仅收发双方可见。 | ✅ 已完成 |
+|              | **垃圾邮件过滤**：基于关键词识别并标记垃圾邮件。 | ✅ 已完成 |
+|              | **邮件撤回功能**：实现了服务器端邮件撤回。       | ✅ 已完成 |
+|              | **Web 邮件界面**：提供图形化浏览器操作界面。     | ✅ 已完成 |
 
-### 环境要求
-- Python 3.8 或更高版本
-- pip 包管理器
+## 3. 用户手册与快速开始
 
-### 安装依赖
+请按照以下步骤来运行和体验本系统。
+
+### 第一步：环境配置
+
+首先，请确保您的环境中已安装 **Python 3.8 或更高版本**。
+
+然后，在项目根目录打开终端，运行以下命令安装所需依赖：
 ```bash
-# 手动安装
 pip install -r requirements.txt
 ```
 
-### 初始化环境
+### 第二步：初始化系统
+
+接下来，运行初始化脚本。此脚本将创建数据库、生成测试账户和必要的SSL证书。
 ```bash
 python init_project.py
 ```
 
-### 🎯 推荐方式：使用统一CLI界面
+### 第三步：使用客户端体验功能
 
-**最简单的使用方式是运行统一的命令行界面：**
+我们提供多种客户端来体验邮件收发功能。
 
-```bash
-python cli.py
-```
+#### 方式一：Web 界面 (推荐)
 
-这将启动一个交互式菜单，提供完整的邮件客户端功能：
-- 📧 发送邮件（支持附件、HTML格式）
-- 📥 接收邮件（POP3/IMAP支持）
-- 🔍 搜索和查看邮件
-- ⚙️ 账户和服务器配置管理
-- 🔒 SSL/TLS安全连接
-
-**或者使用Web界面进行操作**
-
-Web界面提供了简洁直观的操作方式,适合快速上手:
-
+Web 界面提供了最直观的操作方式，适合快速上手。运行以下命令启动 Web 服务：
 ```bash
 python run_simple_web.py
 ```
+然后在浏览器中访问 `http://127.0.0.1:5000` 即可开始使用。
 
-## 🛠️ 高级用户与开发者选项（可选）
+#### 方式二：统一命令行界面 (CLI)
 
-### 启动服务器
+如果您偏好命令行操作，可以使用我们统一的 CLI 入口：
 ```bash
-# 启动SMTP和POP3服务器
+python cli.py
+```
+它将提供一个交互式菜单，引导您完成邮件收发、账户管理等操作。
+
+#### 方式三：SMTP/POP3 命令行客户端
+
+如果您想手动测试 SMTP/POP3 协议，可以使用我们提供的 SMTP/POP3 命令行客户端。
+
+运行以下命令，一键启动 SMTP 和 POP3 服务器：
+```bash
 python examples/example_run_both_servers.py
-
-# 或分别启动
-python server/smtp_server.py --port 465
-python server/pop3_server.py --port 995
 ```
+服务器启动后，将在本地监听以下端口：
+- **SMTP 服务器**: `localhost:8025` (非加密), `localhost:465` (SSL)
+- **POP3 服务器**: `localhost:8110` (非加密), `localhost:995` (SSL)
 
-### 发送邮件
+
+### 客户端配置说明 (关键信息)
+
+- **服务器IP地址**: `localhost` 或 `127.0.0.1`
+- **默认测试账户**:
+  - 用户名: `testuser`
+  - 密码: `testpass`
+- **SSL 证书导入**:
+  - 本项目使用的自签名证书位于 `./certs/` 目录下。
+  - 我们提供的客户端在连接 SSL 端口 (如 `465`, `995`) 时会自动处理证书验证，无需手动导入。
+  - 若使用第三方邮件客户端（如 Outlook, Foxmail）连接，则需要将 `./certs/ca.crt` 证书导入到您的系统的"受信任的根证书颁发机构"中。
+
+## 4. 核心功能演示指南
+
+以下是如何验证本项目的核心功能：
+
+### 发送带附件的邮件
+
+1.  使用 **Web 界面** 或 **CLI 客户端** 登录测试账户。
+2.  撰写一封新邮件，添加任意附件（如图片、PDF文档）。
+3.  发送邮件后，登出当前账户。
+4.  使用同一账户再次登录，通过 POP3 协议接收邮件。
+5.  您将能看到接收到的邮件内容，并可成功下载和查看附件，验证 MIME 结构被完整解析。
+
+### SSL 加密传输验证
+
+1.  客户端在连接 `localhost:465` (SMTPs) 或 `localhost:995` (POP3s) 时，将自动启用 SSL/TLS 加密。
+2.  **安全效果**：在 SSL/TLS 保护下，所有通信内容（包括登录凭据和邮件正文）都是加密的。如果此时有中间人进行网络嗅探（如使用 Wireshark 抓包），将只能看到无意义的加密报文，无法窃取敏感信息，从而有效防止了中间人攻击。
+
+### PGP 端到端加密演示
+
+我们提供了专门的脚本来一键演示 PGP 功能。
+运行以下命令：
 ```bash
-# 使用指定端口和SSL设置（命令行参数具有最高优先级）
-python -m client.smtp_cli \
-  --host localhost --port 8025 \
-  --username testuser --password testpass \
-  --from test@example.com --to test@example.com \
-  --subject "测试邮件" --body "邮件内容"
-
-# SSL端口会自动启用SSL（智能推断）
-python -m client.smtp_cli \
-  --host smtp.gmail.com --port 465 \
-  --username your@gmail.com --password your_password \
-  --from your@gmail.com --to recipient@example.com \
-  --subject "测试邮件" --body "邮件内容"
-```
-
-### 接收邮件
-```bash
-# 使用指定端口（非SSL，命令行参数优先）
-python -m client.pop3_cli \
-  --host localhost --port 8110 \
-  --username testuser --password testpass --list
-
-# SSL端口会自动启用SSL（智能推断）
-python -m client.pop3_cli \
-  --host pop.gmail.com --port 995 \
-  --username your@gmail.com --password your_password --list
-```
-
-## 🔧 **参数优先级说明**（重要修复）
-
-**我们已修复了命令行参数优先级问题**，现在系统按以下优先级处理配置：
-
-### 优先级顺序
-1. **命令行参数**（最高优先级）
-2. 配置文件
-3. 环境变量
-4. 默认值
-
-### 智能SSL推断
-- 当指定标准SSL端口（465, 587, 993, 995）时，自动启用SSL
-- 当指定非SSL端口时，自动禁用SSL
-- 用户可通过 `--ssl` 参数显式覆盖
-
-### 示例对比
-
-**修复前的问题**：
-```bash
-# 即使指定 --port 8110，系统仍使用 .env 中的 995 端口
-python -m client.pop3_cli --port 8110 --username test
-# 实际连接到: localhost:995 (忽略了用户指定的端口)
-```
-
-**修复后的正确行为**：
-```bash
-# 现在正确使用用户指定的端口
-python -m client.pop3_cli --port 8110 --username test
-# 实际连接到: localhost:8110 (尊重用户指定的端口)
-```
-
-## 项目结构
-
-```
-├── server/                 # 服务器模块
-│   ├── smtp_server.py     # SMTP服务器
-│   ├── pop3_server.py     # POP3服务器
-│   ├── db_handler.py      # 数据库处理
-│   └── user_auth.py       # 用户认证
-├── client/                # 客户端模块
-├── examples/              # 使用示例
-├── tests/                 # 测试文件
-│   ├── unit/             # 单元测试
-│   ├── integration/      # 集成测试
-│   └── performance/      # 性能测试
-├── docs/                  # 文档
-├── data/                  # 数据文件
-└── spam_filter/           # 垃圾邮件过滤
-```
-
-## 测试
-
-### 运行特定测试
-```bash
-# 系统功能验证
-python tests/integration/comprehensive_system_test.py
-
-# SSL功能测试
-python tests/integration/test_pop3_ssl.py
-
-# 性能测试
-python tests/performance/test_high_concurrency.py
-```
-
-
-##  PGP端到端加密功能
-
-###  一键PGP演示
-**体验完整的PGP加密邮件系统：**
-
-```bash
-# 运行完整演示，包含密钥生成、加密发送、解密接收
+# 此脚本将自动完成：生成PGP密钥 -> 加密发送 -> 解密接收 的全过程
 python demo_pgp_with_auth.py
 ```
+您也可以通过 PGP 命令行客户端 (`python pgp_cli.py`) 手动体验，测试账户为 `pgptest` / `pgp123`。
 
-**运行统一的命令行界面：测试用户名为pgptest,密码为pgp123**
+## 5. 开发信息
+
+### 项目结构
 ```
-python pgp_cli.py
+├── server/          # 服务器模块 (SMTP/POP3)
+├── client/          # 客户端模块 (SMTP/POP3/MIME)
+├── pgp/             # PGP 端到端加密模块
+├── spam_filter/     # 垃圾邮件过滤模块
+├── examples/        # 运行示例脚本
+├── tests/           # 自动化测试脚本
+├── docs/            # 详细设计文档
+├── templates/       # Web 界面模板
+└── certs/           # SSL 证书文件
 ```
-## 已知问题
 
-1. **邮件格式处理问题**（正在修复中）：
-   - 客户端发送和服务端接收的邮件格式不一致
-   - .eml文件保存和读取的格式兼容性问题
-   - 邮件头部编码解码处理不统一
-   - MIME类型处理和多部分邮件解析存在差异
-   - 附件编码解码在不同组件间不兼容
-   - 数据库存储的邮件元数据解析不一致
+### 运行自动化测试
+```bash
+# 运行完整的集成测试
+python tests/integration/comprehensive_system_test.py
 
-2. **SSL连接稳定性**：
-   - POP3 SSL连接在首次成功后可能失败
-   - 需要进一步优化SSL握手和连接管理
+# 运行并发性能测试
+python tests/performance/test_enhanced_concurrency.py
+```
 
-3. **性能优化**：
-   - 大量并发连接时的性能表现需要测试
-   - 内存使用优化
+## 6. 许可证
 
-4. **错误处理**：
-   - 某些边缘情况的错误处理可能不够完善
-
-## 文档
-
-### 📚 核心文档
-- **[项目架构文档](PROJECT_ARCHITECTURE.md)** - 完整的技术架构和实现细节
-- [用户指南](docs/user_guide/) - 详细的使用指南
-- [API文档](docs/api/) - API接口文档
-- [开发指南](docs/development/) - 开发和扩展指南
-- [PGP加密指南](docs/pgp_guide.md) - PGP端到端加密使用指南
-- [用户手册](docs/user_manual.md) - 详细的使用指南
-- [开发者指南](docs/developer_guide.md) - 开发和扩展指南
-- [测试指南](docs/testing_guide.md) - 测试运行和编写指南
-
-### 🔧 技术文档
-- [依赖说明](docs/dependencies.md) - 依赖库详细说明
-- [安全指南](docs/email_security_guide.md) - 邮件安全最佳实践
-- [Web界面指南](docs/WEB_INTERFACE_GUIDE.md) - Web界面使用说明
-- [现代CLI指南](docs/MODERN_CLI_GUIDE.md) - CLI界面使用说明
-
-### 📋 参考文档
-- [SMTP协议参考](docs/smtp_protocol_reference.md)
-- [POP3协议参考](docs/pop3_protocol_reference.md)
-- [RFC 5322合规性审计](docs/RFC_5322_COMPLIANCE_AUDIT.md)
-- [客户端服务器架构](docs/client_server_architecture.md)
-
-## 许可证
-
-MIT License
+本项目基于 MIT 许可证开源。

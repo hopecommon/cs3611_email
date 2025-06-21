@@ -11,6 +11,7 @@ import time
 import json
 import subprocess
 import threading
+import concurrent.futures
 from pathlib import Path
 from datetime import datetime
 
@@ -311,69 +312,130 @@ class SystemValidator:
             self.test_results["database"] = {"success_rate": 0, "error": str(e)}
             return False
 
-    def test_concurrent_performance(self, num_clients=20):
-        """测试并发性能"""
+    def test_concurrent_performance(self, num_clients=60):
+        """测试并发性能 - 内置实现"""
         print(f"\n[PERFORMANCE] 测试并发性能 ({num_clients}个客户端)...")
 
         try:
-            # 运行高并发测试
-            result = subprocess.run(
-                ["python", "tests/performance/test_high_concurrency.py"],
-                capture_output=True,
-                text=True,
-                timeout=180,  # 3分钟超时
+            # 直接在此处实现并发测试，避免外部脚本的编码问题
+            successful_sends = 0
+            failed_sends = 0
+            send_times = []
+
+            def send_test_email(client_id):
+                """发送测试邮件的函数"""
+                start_time = time.time()
+                try:
+                    # 使用subprocess发送邮件，但使用更简单的参数
+                    result = subprocess.run(
+                        [
+                            "python",
+                            "examples/send_auth_email.py",
+                            "--host",
+                            "localhost",
+                            "--port",
+                            "465",
+                            "--ssl",
+                            "--username",
+                            "testuser",
+                            "--password",
+                            "testpass",
+                            "--sender",
+                            "testuser@example.com",
+                            "--recipient",
+                            "testuser@example.com",
+                            "--subject",
+                            f"并发测试邮件-{client_id}",
+                            "--content",
+                            f"这是第{client_id}个客户端发送的并发测试邮件。",
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+
+                    duration = time.time() - start_time
+                    return (client_id, result.returncode == 0, duration)
+
+                except Exception as e:
+                    duration = time.time() - start_time
+                    return (client_id, False, duration)
+
+            print(f"  [SEND] 启动 {num_clients} 个并发客户端...")
+            start_time = time.time()
+
+            # 使用线程池实现真正的并发
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=min(num_clients, 20)
+            ) as executor:
+                # 提交所有发送任务
+                futures = [
+                    executor.submit(send_test_email, i)
+                    for i in range(1, num_clients + 1)
+                ]
+
+                # 收集结果
+                completed_count = 0
+                for future in concurrent.futures.as_completed(futures, timeout=120):
+                    try:
+                        client_id, success, duration = future.result()
+                        send_times.append(duration)
+
+                        if success:
+                            successful_sends += 1
+                        else:
+                            failed_sends += 1
+
+                        completed_count += 1
+
+                        # 每10个完成显示一次进度
+                        if completed_count % 10 == 0:
+                            print(
+                                f"    [PROGRESS] 完成: {completed_count}/{num_clients}"
+                            )
+
+                    except Exception as e:
+                        failed_sends += 1
+                        print(f"    [ERROR] 客户端任务异常: {e}")
+
+            total_time = time.time() - start_time
+            success_rate = (
+                (successful_sends / num_clients) * 100 if num_clients > 0 else 0
             )
+            avg_response_time = sum(send_times) / len(send_times) if send_times else 0
+            throughput = successful_sends / total_time if total_time > 0 else 0
 
-            # 检查测试结果
-            output = result.stdout
-            stderr = result.stderr
+            print(f"  [RESULT] 并发测试完成:")
+            print(f"    成功发送: {successful_sends}/{num_clients}")
+            print(f"    失败发送: {failed_sends}")
+            print(f"    成功率: {success_rate:.1f}%")
+            print(f"    总耗时: {total_time:.2f}秒")
+            print(f"    平均响应时间: {avg_response_time:.3f}秒")
+            print(f"    吞吐量: {throughput:.2f}邮件/秒")
 
-            print(f"  [RESULT] 并发测试输出:")
-            if output:
-                # 显示关键输出信息
-                lines = output.split("\n")
-                for line in lines:
-                    if any(
-                        keyword in line
-                        for keyword in [
-                            "成功连接",
-                            "通过率",
-                            "PASS",
-                            "FAIL",
-                            "SUCCESS",
-                            "渐进式负载测试总结",
-                        ]
-                    ):
-                        print(f"    {line}")
+            # 保存测试结果
+            self.test_results["concurrency"] = {
+                "success_rate": success_rate,
+                "successful_sends": successful_sends,
+                "failed_sends": failed_sends,
+                "total_time": total_time,
+                "avg_response_time": avg_response_time,
+                "throughput": throughput,
+                "num_clients": num_clients,
+            }
 
-            if stderr:
-                print(f"  [WARNING] 错误信息: {stderr}")
-
-            # 判断成功条件
-            success_indicators = [
-                "SUCCESS" in output,
-                result.returncode == 0,
-                "通过率:" in output and not "0.0%" in output,
-                "[PASS]" in output,
-            ]
-
-            if any(success_indicators):
-                print(f"  [OK] 并发测试通过")
-                self.test_results["concurrency"] = {"success_rate": 100}
+            # 判断测试是否成功 (60%以上成功率认为通过)
+            if success_rate >= 60.0:
+                print(f"  [OK] 并发测试通过 (成功率: {success_rate:.1f}%)")
+                print(f"  [INFO] 如需更精细的并发测试和详细分析报告，请运行:")
+                print(f"         python tests/performance/test_enhanced_concurrency.py")
                 return True
             else:
-                print(f"  [ERROR] 并发测试失败")
-                print(f"    返回码: {result.returncode}")
-                self.test_results["concurrency"] = {
-                    "success_rate": 0,
-                    "output": output[:500],
-                }
+                print(f"  [FAIL] 并发测试失败 (成功率: {success_rate:.1f}%)")
+                print(f"  [INFO] 如需更精细的并发测试和详细分析报告，请运行:")
+                print(f"         python tests/performance/test_enhanced_concurrency.py")
                 return False
 
-        except subprocess.TimeoutExpired:
-            print(f"  [ERROR] 并发测试超时")
-            self.test_results["concurrency"] = {"success_rate": 0, "error": "timeout"}
-            return False
         except Exception as e:
             print(f"  [ERROR] 并发测试异常: {e}")
             self.test_results["concurrency"] = {"success_rate": 0, "error": str(e)}
@@ -436,7 +498,7 @@ class SystemValidator:
                 ("SMTP功能测试", self.test_smtp_functionality),
                 ("数据库功能测试", self.test_database_functionality),
                 ("POP3功能测试", self.test_pop3_functionality),
-                ("并发性能测试", self.test_concurrent_performance),
+                ("简易并发性能测试", self.test_concurrent_performance),
             ]
 
             passed_tests = 0
@@ -465,6 +527,13 @@ class SystemValidator:
             )
             print(f"总体状态: {report['test_summary']['overall_status']}")
             print(f"测试耗时: {report['test_summary']['duration_seconds']:.1f} 秒")
+            print("")
+            print("[ADVANCED] 进阶测试选项:")
+            print("  如需更详细的并发性能分析和可视化报告，请运行:")
+            print("  python tests/performance/test_enhanced_concurrency.py")
+            print(
+                "  该测试支持最多200个并发用户，包含详细的时间分析、内容完整性验证等功能"
+            )
 
             return passed_tests == total_tests
 

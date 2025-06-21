@@ -20,6 +20,7 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Dict, Optional
+import argparse
 
 # 添加项目根目录到Python路径
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -1035,32 +1036,42 @@ class ConnectionMonitor:
 
 def main():
     """主函数"""
+    parser = argparse.ArgumentParser(description="增强版SMTP/POP3并发压力测试工具")
+    parser.add_argument(
+        "--users",
+        type=int,
+        help="指定并发用户数，以非交互模式运行。",
+    )
+    args = parser.parse_args()
     try:
-        print("增强版SMTP/POP3并发压力测试工具")
-        print("支持60个用户同时发送邮件，包含详细的性能分析")
-        print("-" * 60)
-
-        print("请选择测试模式:")
-        print("1. 快速测试 (5个用户)")
-        print("2. 中等测试 (20个用户)")
-        print("3. 高负载测试 (60个用户)")
-        print("4. 极限测试 (100个用户)")
-        print("5. 自定义用户数")
-
-        choice = input("选择模式 (1/2/3/4/5, 默认2): ").strip() or "2"
-
-        if choice == "1":
-            num_users = 5
-        elif choice == "2":
-            num_users = 20
-        elif choice == "3":
-            num_users = 60
-        elif choice == "4":
-            num_users = 100
-        elif choice == "5":
-            num_users = int(input("输入用户数 (1-200): ") or "10")
+        if args.users:
+            num_users = args.users
         else:
-            num_users = 20
+            print("增强版SMTP/POP3并发压力测试工具")
+            print("支持60个用户同时发送邮件，包含详细的性能分析")
+            print("-" * 60)
+
+            print("请选择测试模式:")
+            print("1. 快速测试 (5个用户)")
+            print("2. 中等测试 (20个用户)")
+            print("3. 高负载测试 (60个用户)")
+            print("4. 极限测试 (100个用户)")
+            print("5. 自定义用户数")
+
+            choice = input("选择模式 (1/2/3/4/5, 默认2): ").strip() or "2"
+
+            if choice == "1":
+                num_users = 5
+            elif choice == "2":
+                num_users = 20
+            elif choice == "3":
+                num_users = 60
+            elif choice == "4":
+                num_users = 100
+            elif choice == "5":
+                num_users = int(input("输入用户数 (1-200): ") or "10")
+            else:
+                num_users = 20
 
         print(f"\n开始 {num_users} 用户并发测试...")
 
