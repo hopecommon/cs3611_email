@@ -302,6 +302,34 @@ class WebCLIBridge:
         """获取服务商配置说明"""
         return self.provider_manager.get_provider_notes(provider_id)
 
+    def delete_email(self, message_id, email_type="received"):
+        """删除邮件 - 复用CLI的删除逻辑"""
+        try:
+            # 导入数据库服务
+            from server.new_db_handler import EmailService
+
+            db = EmailService()
+
+            if email_type == "sent":
+                # 删除已发送邮件（物理删除）
+                success = db.delete_sent_email_metadata(message_id)
+                email_type_name = "已发送邮件"
+            else:
+                # 软删除接收邮件（标记为已删除）
+                success = db.update_email(message_id, is_deleted=True)
+                email_type_name = "邮件"
+
+            if success:
+                logger.info(f"{email_type_name}删除成功: {message_id}")
+                return {"success": True, "message": f"{email_type_name}删除成功"}
+            else:
+                logger.error(f"{email_type_name}删除失败: {message_id}")
+                return {"success": False, "error": f"{email_type_name}删除失败"}
+
+        except Exception as e:
+            logger.error(f"删除邮件异常: {e}")
+            return {"success": False, "error": f"删除邮件时出错: {str(e)}"}
+
 
 # 创建全局桥接实例
 cli_bridge = WebCLIBridge()
@@ -530,10 +558,41 @@ def receive_emails_page():
 
     if result["success"]:
         emails = result["emails"]
-        # 将Email对象转换为字典格式，以便JSON序列化
+
+        # 从数据库获取已删除邮件列表，用于过滤
+        try:
+            from server.new_db_handler import EmailService
+
+            db_service = EmailService()
+            deleted_emails = db_service.list_emails(
+                user_email=session["email"],
+                include_deleted=True,
+                include_spam=True,
+                limit=2000,  # 获取足够多的已删除邮件记录
+            )
+            # 创建已删除邮件ID集合，只包含is_deleted=True的邮件
+            deleted_message_ids = {
+                email["message_id"]
+                for email in deleted_emails
+                if email.get("is_deleted", False)
+            }
+            logger.info(f"发现 {len(deleted_message_ids)} 封已删除邮件，将从显示中过滤")
+        except Exception as e:
+            logger.warning(f"获取已删除邮件列表失败: {e}")
+            deleted_message_ids = set()
+
+        # 将Email对象转换为字典格式，并过滤已删除邮件
         emails_dict = []
+        filtered_count = 0
         for email in emails:
             email_dict = email.to_dict()
+
+            # 检查是否为已删除邮件
+            if email_dict.get("message_id") in deleted_message_ids:
+                filtered_count += 1
+                logger.debug(f"过滤已删除邮件: {email_dict.get('message_id')}")
+                continue
+
             # 格式化日期字段以便模板使用
             if email_dict.get("date"):
                 try:
@@ -553,6 +612,11 @@ def receive_emails_page():
                     email_dict["formatted_time"] = ""
                     email_dict["formatted_datetime"] = email_dict["date"]
             emails_dict.append(email_dict)
+
+        if filtered_count > 0:
+            logger.info(
+                f"已过滤 {filtered_count} 封已删除邮件，显示 {len(emails_dict)} 封邮件"
+            )
 
         # 根据实际获取的数量显示不同的消息
         if limit == "all":
@@ -686,6 +750,55 @@ def api_providers():
     except Exception as e:
         logger.error(f"获取服务商列表失败: {e}")
         return jsonify({"success": False, "error": f"获取失败: {str(e)}"})
+
+
+@app.route("/api/delete_email", methods=["POST"])
+def api_delete_email():
+    """删除邮件API"""
+    logger.info("删除邮件API被调用")
+
+    if "email" not in session:
+        logger.warning("删除邮件API: 用户未登录")
+        return jsonify({"success": False, "error": "未登录"})
+
+    logger.info(f"删除邮件API: 用户已登录 - {session['email']}")
+
+    # 确保当前账户已加载
+    if (
+        not cli_bridge.current_account
+        or cli_bridge.current_account.get("email") != session["email"]
+    ):
+        logger.info(f"删除邮件API: 重新加载账户 - {session['email']}")
+        if not cli_bridge.load_account(session["email"]):
+            logger.error("删除邮件API: 账户加载失败")
+            return jsonify({"success": False, "error": "账户加载失败"})
+
+    try:
+        data = request.get_json()
+        logger.info(f"删除邮件API: 接收到数据 - {data}")
+
+        message_id = data.get("message_id", "").strip()
+        email_type = data.get("email_type", "received").strip()
+
+        if not message_id:
+            logger.warning("删除邮件API: 邮件ID为空")
+            return jsonify({"success": False, "error": "邮件ID不能为空"})
+
+        logger.info(
+            f"删除邮件API: 准备删除邮件 - ID: {message_id[:30]}..., 类型: {email_type}"
+        )
+
+        # 调用删除方法
+        result = cli_bridge.delete_email(message_id, email_type)
+        logger.info(f"删除邮件API: 删除结果 - {result}")
+        return jsonify(result)
+
+    except Exception as e:
+        logger.error(f"删除邮件API异常: {e}")
+        import traceback
+
+        logger.error(f"删除邮件API异常详情: {traceback.format_exc()}")
+        return jsonify({"success": False, "error": f"删除失败: {str(e)}"})
 
 
 @app.route("/api/debug")

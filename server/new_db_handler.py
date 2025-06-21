@@ -413,12 +413,16 @@ class EmailService:
             bool: 操作是否成功
         """
         try:
+            # 初始化success变量
+            success = False
+
             # 检查邮件是否存在于接收邮件表
             received_email = self.email_repo.get_email_by_id(message_id)
 
             if received_email:
                 # 邮件在接收邮件表中，更新接收邮件状态
                 success = self.email_repo.update_email_status(message_id, **updates)
+                logger.debug(f"更新接收邮件状态: {message_id}, 结果: {success}")
             else:
                 # 邮件不在接收邮件表中，尝试更新已发送邮件
                 # 对于已发送邮件，只支持部分字段更新
@@ -432,6 +436,21 @@ class EmailService:
                     success = self.email_repo.update_sent_email_status(
                         message_id, **sent_updates
                     )
+                    logger.debug(f"更新已发送邮件状态: {message_id}, 结果: {success}")
+                else:
+                    # 特殊处理：如果是标记删除操作，对于不存在的邮件我们认为操作成功
+                    # 因为邮件可能只是从POP3服务器获取但没有保存到数据库
+                    if "is_deleted" in updates and updates["is_deleted"]:
+                        logger.info(
+                            f"邮件 {message_id} 不在数据库中，标记删除操作视为成功"
+                        )
+                        success = True
+                    else:
+                        # 其他情况记录警告
+                        logger.warning(
+                            f"邮件 {message_id} 不在接收邮件表中，且没有可更新的已发送邮件字段"
+                        )
+                        success = False
 
             return success
         except Exception as e:
@@ -451,9 +470,18 @@ class EmailService:
         """
         try:
             if permanent:
-                return self.email_repo.delete_email(message_id)
+                # 永久删除：先尝试删除接收邮件，如果失败则尝试删除已发送邮件
+                success = self.email_repo.delete_email(message_id)
+                if not success:
+                    success = self.email_repo.delete_sent_email(message_id)
+                # 如果都没有找到，对于永久删除我们也认为成功
+                if not success:
+                    logger.info(f"邮件 {message_id} 不在数据库中，永久删除操作视为成功")
+                    success = True
+                return success
             else:
-                return self.email_repo.update_email_status(message_id, is_deleted=True)
+                # 标记删除：使用 update_email 方法（已经处理了不存在的情况）
+                return self.update_email(message_id, is_deleted=True)
         except Exception as e:
             logger.error(f"删除邮件时出错: {e}")
             return False
